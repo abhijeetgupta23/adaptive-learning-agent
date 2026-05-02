@@ -1,0 +1,15 @@
+{
+  "id": "curriculum_sql_02",
+  "description": "Intermediate SQL join confidence for day-to-day queries.",
+  "goal": {
+    "domain": "databases",
+    "sub_goal": "write SQL joins confidently in day-to-day queries",
+    "current_level": "intermediate",
+    "desired_depth": "working",
+    "time_budget_hours": 5.0,
+    "preferred_modalities": []
+  },
+  "must_cover_keywords": ["join"],
+  "min_units": 3,
+  "max_units": 6
+}

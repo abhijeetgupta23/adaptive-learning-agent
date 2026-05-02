@@ -1,0 +1,13 @@
+{
+  "id": "pedagogy_sql_02",
+  "description": "Step-by-step procedure — worked_example is the natural fit.",
+  "unit": {
+    "id": "u2",
+    "objective": "Write a multi-join query step-by-step to answer a specific business question",
+    "prerequisites": ["u1"],
+    "recommended_pedagogy": "worked_example",
+    "grounding_sources": [{"url": "https://x.com/b", "title": "b"}]
+  },
+  "learner_state": {"user_id": "demo"},
+  "acceptable_methods": ["worked_example", "game"]
+}

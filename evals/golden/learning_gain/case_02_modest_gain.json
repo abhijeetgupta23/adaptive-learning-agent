@@ -1,0 +1,8 @@
+{
+  "id": "learning_gain_02",
+  "description": "Synthetic learner on Italian travel vocab — moderate gain (0.4 → 0.65).",
+  "domain": "italian_travel",
+  "pre_score": 0.4,
+  "post_score": 0.65,
+  "min_delta": 0.2
+}

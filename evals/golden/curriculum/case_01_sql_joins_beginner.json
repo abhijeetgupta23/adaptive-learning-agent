@@ -1,0 +1,15 @@
+{
+  "id": "curriculum_sql_01",
+  "description": "Beginner SQL joins curriculum, weekend-sized.",
+  "goal": {
+    "domain": "databases",
+    "sub_goal": "understand SQL joins (INNER, LEFT, RIGHT, FULL) and when to use each",
+    "current_level": "beginner",
+    "desired_depth": "working",
+    "time_budget_hours": 8.0,
+    "preferred_modalities": ["visual"]
+  },
+  "must_cover_keywords": ["inner join", "left join"],
+  "min_units": 3,
+  "max_units": 7
+}

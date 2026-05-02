@@ -1,0 +1,17 @@
+{
+  "id": "intent_italian_01",
+  "description": "Language learning for a concrete trip — cocktail depth, interactive modality implied.",
+  "conversation": [
+    {"role": "user", "content": "I'm going to Rome for two weeks in June and want to learn enough Italian to navigate basic travel situations — ordering food, asking directions, buying train tickets. I don't speak any Italian right now."},
+    {"role": "assistant", "content": "Got it. How much time can you commit before the trip, and do you prefer flashcard-style drills, conversation practice, or something else?"},
+    {"role": "user", "content": "I have about 20 hours total. Conversation practice would be great — I retain things better when I actually use them."}
+  ],
+  "expected_goal": {
+    "domain": "italian language",
+    "sub_goal": "travel-level conversational Italian for a two-week trip (ordering, directions, tickets)",
+    "current_level": "novice",
+    "desired_depth": "cocktail",
+    "time_budget_hours": 20.0,
+    "preferred_modalities": ["interactive", "verbal"]
+  }
+}

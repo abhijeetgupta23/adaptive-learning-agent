@@ -1,0 +1,219 @@
+{
+  "name": "asyncio_scheduler",
+  "description": "Recorded shape of an end-to-end session for the asyncio topic. Game iframe is a compact hand-authored demo. Use ?fixture=1 to replay locally without hitting the backend.",
+  "events": [
+    {"event": "session_started", "session_id": "fixture-1"},
+    {
+      "event": "intent_ask",
+      "session_id": "fixture-1",
+      "question": "Great topic! Quick: are you new to asyncio or already writing async code in production? And how deep — debug-it confidently, or build event-loop tooling?"
+    },
+    {
+      "event": "cost_update",
+      "total_usd": 0.003,
+      "by_agent": {"intent": 0.003},
+      "cache_hit_rate": 0.0,
+      "call_count": 1
+    },
+    {
+      "event": "intent_update",
+      "message": "Got it. Researching and planning curriculum…",
+      "goal": {
+        "domain": "python",
+        "sub_goal": "asyncio scheduler internals (await, ready queue, control return)",
+        "current_level": "intermediate",
+        "desired_depth": "working",
+        "time_budget_hours": 2.0,
+        "preferred_modalities": ["interactive", "visual"]
+      }
+    },
+    {
+      "event": "curriculum_ready",
+      "curriculum": {
+        "goal": {
+          "domain": "python",
+          "sub_goal": "asyncio scheduler internals (await, ready queue, control return)",
+          "current_level": "intermediate",
+          "desired_depth": "working",
+          "time_budget_hours": 2.0,
+          "preferred_modalities": ["interactive", "visual"]
+        },
+        "units": [
+          {
+            "id": "u1",
+            "objective": "Map the actors: event loop, coroutine, Task, Future, awaitable",
+            "prerequisites": [],
+            "recommended_pedagogy": "analogy",
+            "grounding_sources": [
+              {"url": "https://docs.python.org/3/library/asyncio-task.html", "title": "asyncio Tasks", "snippet": "Tasks wrap coroutines and let them run on the event loop."}
+            ]
+          },
+          {
+            "id": "u2",
+            "objective": "Trace what await does: yield-from chain to the loop and back",
+            "prerequisites": ["u1"],
+            "recommended_pedagogy": "worked_example",
+            "grounding_sources": [
+              {"url": "https://tenthousandmeters.com/blog/python-behind-the-scenes-12-how-asyncawait-works-in-python/", "title": "Python behind the scenes #12", "snippet": "The Task drives the coroutine via send() until it yields a Future."}
+            ]
+          },
+          {
+            "id": "u3",
+            "objective": "Drive the scheduler: queue, run, suspend, resume — predict ordering",
+            "prerequisites": ["u2"],
+            "recommended_pedagogy": "game",
+            "grounding_sources": [
+              {"url": "https://docs.python.org/3/library/asyncio-eventloop.html", "title": "Event loop reference", "snippet": "loop.call_soon schedules callbacks FIFO on the ready queue."}
+            ]
+          },
+          {
+            "id": "u4",
+            "objective": "Connect the dots: explain when control returns to the loop",
+            "prerequisites": ["u3"],
+            "recommended_pedagogy": "feynman",
+            "grounding_sources": [
+              {"url": "https://docs.python.org/3/library/asyncio-eventloop.html", "title": "Event loop reference", "snippet": "Control returns when a coroutine yields or completes."}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "event": "cost_update",
+      "total_usd": 0.117,
+      "by_agent": {"intent": 0.003, "curriculum": 0.114},
+      "cache_hit_rate": 0.0,
+      "call_count": 4
+    },
+    {
+      "event": "unit_started",
+      "unit_id": "u1",
+      "plan": {
+        "unit_id": "u1",
+        "methods": [{"method": "analogy", "params": {}}],
+        "rationale": "Using curriculum-recommended pedagogy."
+      }
+    },
+    {
+      "event": "teaching_chunk",
+      "unit_id": "u1",
+      "method": "analogy",
+      "content": "[Demo analogy teaching for: Map the actors: event loop, coroutine, Task, Future, awaitable]"
+    },
+    {
+      "event": "assessment_result",
+      "result": {
+        "unit_id": "u1",
+        "verdict": "pass",
+        "diagnostic_notes": "Demo: simulated pass (interactive assessment pending).",
+        "confidence": 0.5
+      }
+    },
+    {
+      "event": "unit_started",
+      "unit_id": "u2",
+      "plan": {
+        "unit_id": "u2",
+        "methods": [{"method": "worked_example", "params": {}}],
+        "rationale": "Using curriculum-recommended pedagogy."
+      }
+    },
+    {
+      "event": "teaching_chunk",
+      "unit_id": "u2",
+      "method": "worked_example",
+      "content": "# How `await` Suspends and Resumes via the Generator Protocol\n\nPython's `async/await` syntax is sugar over generators. When you write `await something`, the coroutine **yields a Future** up to the event loop and is paused. The loop later calls `send(value)` on the coroutine to resume it. This example builds the chain by hand so you can see it.\n\n```python\nimport asyncio\n\nclass MyFuture:\n    def __init__(self, value):\n        self._value = value\n    def __await__(self):\n        yield self          # ← suspends; hands self up to the loop\n        return self._value  # ← runs after loop calls send(value)\n\nasync def inner():\n    print(\"[inner] awaiting Future\")\n    result = await MyFuture(42)\n    print(f\"[inner] resumed with {result}\")\n    return result * 2\n\nasync def outer():\n    print(\"[outer] calling inner()\")\n    return await inner()\n\nresult = asyncio.run(outer())\nprint(f\"final: {result}\")\n```\n\n## Step-by-step trace\n\n1. **`asyncio.run(outer())`** wraps `outer()` in a Task; loop calls `Task.__step` which calls `coro.send(None)`.\n2. **`outer` calls `inner()`** — delegation pushes execution into `inner`.\n3. **`inner` hits `await MyFuture(42)`** — `MyFuture.__await__` is invoked, yields `self`.\n4. **The yield bubbles all the way up** through `inner → outer → Task.__step`. The Task records the yielded Future and returns control.\n5. **Loop \"does I/O\"** — in a real loop this is where `select()` blocks. Here we instantly resolve `value_to_send = 42`.\n6. **`coro.send(42)`** re-enters the chain; `__await__` returns 42, `inner` computes `42 * 2 = 84`, `StopIteration(84)` propagates.\n7. **`outer` returns 84** — `Task` completes.\n\n## Why this matters\n\nEvery `await expr` compiles to `yield from expr.__await__()`. The loop only ever sees **one Future at a time** — the intermediate `yield from` links are transparent wiring. The classic gotcha is calling a CPU-bound function without `await` (or `run_in_executor`): no Future is ever yielded, `Task.__step` never returns, and the **entire event loop freezes**."
+    },
+    {
+      "event": "assessment_result",
+      "result": {
+        "unit_id": "u2",
+        "verdict": "pass",
+        "diagnostic_notes": "Demo: simulated pass (interactive assessment pending).",
+        "confidence": 0.5
+      }
+    },
+    {
+      "event": "cost_update",
+      "total_usd": 0.146,
+      "by_agent": {"intent": 0.003, "curriculum": 0.114, "worked_example": 0.029},
+      "cache_hit_rate": 0.05,
+      "call_count": 5
+    },
+    {
+      "event": "unit_started",
+      "unit_id": "u3",
+      "plan": {
+        "unit_id": "u3",
+        "methods": [{"method": "game", "params": {}}],
+        "rationale": "Using curriculum-recommended pedagogy."
+      }
+    },
+    {
+      "event": "teaching_chunk",
+      "unit_id": "u3",
+      "method": "game",
+      "content": "<div id=\"sched\"><style>#sched{font-family:ui-monospace,monospace;background:#0d1117;color:#c9d1d9;padding:14px;min-height:380px;border-radius:8px}#sched h2{margin:0 0 4px;color:#58a6ff;font-size:1.05em}#sched .sub{color:#8b949e;font-size:.78em;margin-bottom:10px}#sched .panels{display:flex;gap:8px;flex-wrap:wrap}#sched .col{flex:1;min-width:160px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px}#sched .col h3{margin:0 0 6px;font-size:.7em;text-transform:uppercase;letter-spacing:1px;color:#8b949e}#sched .task{display:flex;justify-content:space-between;padding:5px 8px;margin:3px 0;border-radius:4px;font-size:.82em;border:1px solid #30363d;background:#21262d}#sched .task.ready{border-color:#238636;color:#3fb950}#sched .task.running{border-color:#d29922;color:#e3b341}#sched .task.done{border-color:#30363d;color:#484f58;text-decoration:line-through}#sched .ctrl{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}#sched button{background:#1f6feb;color:#fff;border:none;padding:6px 12px;border-radius:5px;font-family:inherit;font-size:.82em;cursor:pointer}#sched button:hover{background:#388bfd}#sched button:disabled{opacity:.4;cursor:not-allowed}#sched .log{margin-top:8px;font-size:.74em;color:#8b949e;background:#0d1117;border:1px solid #21262d;border-radius:5px;padding:6px;max-height:90px;overflow-y:auto}#sched .empty{color:#484f58;font-size:.78em;font-style:italic}</style><h2>⚡ Coroutine Scheduler</h2><div class=\"sub\">Drive the loop — add coroutines, run the next one, watch them suspend.</div><div class=\"panels\"><div class=\"col\"><h3>Ready</h3><div id=\"ready\"></div></div><div class=\"col\"><h3>Running</h3><div id=\"running\"></div></div><div class=\"col\"><h3>Done</h3><div id=\"done\"></div></div></div><div class=\"ctrl\"><button id=\"add\">+ Add coro</button><button id=\"run\">▶ Run next</button><button id=\"reset\">↻ Reset</button></div><div class=\"log\" id=\"log\">Ready queue is FIFO. \"Run next\" pops the head, runs it, suspends it back to ready.</div><script>(function(){const names=['fetch','parse','render','tick','poll','flush','sync'];const state={ready:[],running:null,done:[],n:0,steps:0};const $=id=>document.getElementById(id);function log(m){const l=$('log');const d=document.createElement('div');d.textContent='› '+m;l.appendChild(d);l.scrollTop=l.scrollHeight;}function render(){const r=$('ready'),rn=$('running'),dn=$('done');r.innerHTML='';rn.innerHTML='';dn.innerHTML='';if(state.ready.length===0)r.innerHTML='<div class=\"empty\">empty</div>';if(!state.running)rn.innerHTML='<div class=\"empty\">idle</div>';if(state.done.length===0)dn.innerHTML='<div class=\"empty\">none</div>';state.ready.forEach((t,i)=>{const d=document.createElement('div');d.className='task ready';d.innerHTML='<span>'+t.name+'</span><span>'+t.uses+'/'+t.budget+'</span>';r.appendChild(d);});if(state.running){const d=document.createElement('div');d.className='task running';d.innerHTML='<span>'+state.running.name+'</span><span>'+state.running.uses+'/'+state.running.budget+'</span>';rn.appendChild(d);}state.done.forEach(t=>{const d=document.createElement('div');d.className='task done';d.innerHTML='<span>'+t.name+'</span><span>done</span>';dn.appendChild(d);});}$('add').addEventListener('click',()=>{const nm=names[state.n%names.length]+'_'+(state.n+1);state.ready.push({name:nm,uses:0,budget:2+Math.floor(Math.random()*3)});state.n++;log('queued '+nm+' (FIFO tail)');render();});$('run').addEventListener('click',()=>{if(state.running){state.running.uses++;if(state.running.uses>=state.running.budget){state.done.push(state.running);log('✓ '+state.running.name+' finished');state.running=null;}else{state.ready.push(state.running);log(state.running.name+' awaited → back to ready (uses '+state.running.uses+'/'+state.running.budget+')');state.running=null;}}if(!state.running&&state.ready.length>0){state.running=state.ready.shift();state.steps++;log('▶ step '+state.steps+': running '+state.running.name);}render();});$('reset').addEventListener('click',()=>{state.ready=[];state.running=null;state.done=[];state.n=0;state.steps=0;log('reset — try queueing 3 coros and running them in order');render();});render();})();</script></div>"
+    },
+    {
+      "event": "assessment_result",
+      "result": {
+        "unit_id": "u3",
+        "verdict": "pass",
+        "diagnostic_notes": "Demo: simulated pass (interactive assessment pending).",
+        "confidence": 0.5
+      }
+    },
+    {
+      "event": "cost_update",
+      "total_usd": 0.514,
+      "by_agent": {"intent": 0.003, "curriculum": 0.114, "worked_example": 0.029, "game": 0.368},
+      "cache_hit_rate": 0.158,
+      "call_count": 13
+    },
+    {
+      "event": "unit_started",
+      "unit_id": "u4",
+      "plan": {
+        "unit_id": "u4",
+        "methods": [{"method": "feynman", "params": {}}],
+        "rationale": "Using curriculum-recommended pedagogy."
+      }
+    },
+    {
+      "event": "teaching_chunk",
+      "unit_id": "u4",
+      "method": "feynman",
+      "content": "[Demo feynman teaching for: Connect the dots: explain when control returns to the loop]"
+    },
+    {
+      "event": "assessment_result",
+      "result": {
+        "unit_id": "u4",
+        "verdict": "pass",
+        "diagnostic_notes": "Demo: simulated pass (interactive assessment pending).",
+        "confidence": 0.5
+      }
+    },
+    {
+      "event": "cost_update",
+      "total_usd": 0.516,
+      "by_agent": {"intent": 0.006, "curriculum": 0.114, "worked_example": 0.029, "game": 0.368},
+      "cache_hit_rate": 0.158,
+      "call_count": 14
+    },
+    {"event": "complete"}
+  ],
+  "intent_answer_replies_with": "Production async/await user; want working knowledge for debugging. Two hours.",
+  "delays_ms": {
+    "session_started": 100,
+    "intent_ask": 600,
+    "intent_update": 800,
+    "cost_update": 60,
+    "curriculum_ready": 1500,
+    "unit_started": 200,
+    "teaching_chunk": 700,
+    "assessment_result": 250,
+    "complete": 200
+  }
+}

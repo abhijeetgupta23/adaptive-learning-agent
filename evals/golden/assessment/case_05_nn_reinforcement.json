@@ -1,0 +1,17 @@
+{
+  "id": "assessment_nn_01",
+  "description": "Attention intuition partially there — needs_reinforcement.",
+  "unit": {
+    "id": "u1",
+    "objective": "Build intuition for attention as a lookup (queries, keys, values)",
+    "prerequisites": [],
+    "recommended_pedagogy": "analogy",
+    "grounding_sources": [{"url": "https://x.com/a", "title": "a"}]
+  },
+  "method": "analogy",
+  "transcript": [
+    {"role": "assistant", "content": "Imagine attention as a library: your query is the question, keys are book titles, values are the contents."},
+    {"role": "user", "content": "Ok so... the query picks a book? By looking at titles? And then it reads the contents? But all books? Or just the best match?"}
+  ],
+  "expected_verdict": "needs_reinforcement"
+}

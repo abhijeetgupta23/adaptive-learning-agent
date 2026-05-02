@@ -1,0 +1,8 @@
+{
+  "id": "learning_gain_01",
+  "description": "Synthetic learner goes from 20% to 75% on SQL joins quiz after one unit.",
+  "domain": "sql_joins",
+  "pre_score": 0.2,
+  "post_score": 0.75,
+  "min_delta": 0.2
+}

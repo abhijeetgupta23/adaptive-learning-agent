@@ -1,0 +1,18 @@
+{
+  "id": "intent_sql_01",
+  "description": "User provides all required info upfront in a single message; agent should finalize immediately.",
+  "conversation": [
+    {
+      "role": "user",
+      "content": "I'm a JavaScript dev with ~1 year of backend experience. I know basic SELECT/WHERE but joins confuse me, especially LEFT vs INNER and when to use each. I want a working understanding so I can write analytics queries at work. I have a weekend (maybe 8 hours) and I learn best from visual examples."
+    }
+  ],
+  "expected_goal": {
+    "domain": "databases",
+    "sub_goal": "understand SQL joins (INNER, LEFT, RIGHT, FULL) and when to use each",
+    "current_level": "beginner",
+    "desired_depth": "working",
+    "time_budget_hours": 8.0,
+    "preferred_modalities": ["visual"]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "id": "assessment_italian_01",
+  "description": "Language learner produces correct sentence with correct grammar — pass.",
+  "unit": {
+    "id": "u1",
+    "objective": "Order food politely in Italian using Vorrei + noun construction",
+    "prerequisites": [],
+    "recommended_pedagogy": "retrieval",
+    "grounding_sources": [{"url": "https://x.com/a", "title": "a"}]
+  },
+  "method": "retrieval",
+  "transcript": [
+    {"role": "assistant", "content": "How would you ask for two coffees, politely?"},
+    {"role": "user", "content": "Vorrei due caffè, per favore."}
+  ],
+  "expected_verdict": "pass"
+}

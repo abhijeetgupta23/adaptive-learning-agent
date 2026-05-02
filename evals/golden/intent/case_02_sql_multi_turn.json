@@ -1,0 +1,19 @@
+{
+  "id": "intent_sql_02",
+  "description": "Multi-turn conversation: vague initial goal, agent probes, user clarifies piece by piece.",
+  "conversation": [
+    {"role": "user", "content": "I want to get better at SQL."},
+    {"role": "assistant", "content": "What part of SQL is giving you trouble, and what's your current level?"},
+    {"role": "user", "content": "Joins mostly. I've been writing SQL for about two years but joins still trip me up in complex queries."},
+    {"role": "assistant", "content": "Got it. Are you looking for a deep theoretical understanding or just want to be confident writing them day-to-day? And how much time can you invest?"},
+    {"role": "user", "content": "Day-to-day confidence is the goal. I can spend about 5 hours this week."}
+  ],
+  "expected_goal": {
+    "domain": "databases",
+    "sub_goal": "write SQL joins confidently in day-to-day queries",
+    "current_level": "intermediate",
+    "desired_depth": "working",
+    "time_budget_hours": 5.0,
+    "preferred_modalities": []
+  }
+}

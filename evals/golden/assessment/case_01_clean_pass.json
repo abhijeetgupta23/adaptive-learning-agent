@@ -1,0 +1,17 @@
+{
+  "id": "assessment_sql_01",
+  "description": "Learner produces transfer example unprompted — pass.",
+  "unit": {
+    "id": "u1",
+    "objective": "Distinguish INNER vs LEFT JOIN",
+    "prerequisites": [],
+    "recommended_pedagogy": "visual",
+    "grounding_sources": [{"url": "https://x.com/a", "title": "a"}]
+  },
+  "method": "visual",
+  "transcript": [
+    {"role": "assistant", "content": "INNER keeps matched rows; LEFT keeps all rows from the left table."},
+    {"role": "user", "content": "So if I want to list all customers and show whether they've ordered, I'd use LEFT JOIN on orders. Customers with no orders keep NULL columns — INNER would drop them."}
+  ],
+  "expected_verdict": "pass"
+}

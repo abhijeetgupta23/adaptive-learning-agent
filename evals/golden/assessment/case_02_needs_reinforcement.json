@@ -1,0 +1,17 @@
+{
+  "id": "assessment_sql_02",
+  "description": "Learner has the gist but fumbles terminology — needs_reinforcement.",
+  "unit": {
+    "id": "u1",
+    "objective": "Distinguish INNER vs LEFT JOIN",
+    "prerequisites": [],
+    "recommended_pedagogy": "visual",
+    "grounding_sources": [{"url": "https://x.com/a", "title": "a"}]
+  },
+  "method": "visual",
+  "transcript": [
+    {"role": "assistant", "content": "INNER keeps matched rows; LEFT keeps all rows from the left table."},
+    {"role": "user", "content": "So INNER is when both tables match? And LEFT, uh, it's the one that keeps... hm, the left one? I think. If a customer has no order, LEFT shows them? I'd have to look it up."}
+  ],
+  "expected_verdict": "needs_reinforcement"
+}

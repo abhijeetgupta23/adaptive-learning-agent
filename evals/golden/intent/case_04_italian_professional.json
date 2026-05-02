@@ -1,0 +1,15 @@
+{
+  "id": "intent_italian_02",
+  "description": "Language learning at working depth for professional use; intermediate starting point.",
+  "conversation": [
+    {"role": "user", "content": "I already speak Spanish fluently and I want to pick up Italian for work — I'm going to be collaborating with a team in Milan. I can read a fair amount of Italian already but speaking is rough. I've got maybe 40 hours over the next couple months and I'd like to be comfortable in meetings."}
+  ],
+  "expected_goal": {
+    "domain": "italian language",
+    "sub_goal": "conversational Italian sufficient for professional meetings, leveraging Spanish base",
+    "current_level": "intermediate",
+    "desired_depth": "working",
+    "time_budget_hours": 40.0,
+    "preferred_modalities": []
+  }
+}

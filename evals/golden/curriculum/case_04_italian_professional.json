@@ -1,0 +1,15 @@
+{
+  "id": "curriculum_italian_02",
+  "description": "Working-level Italian for professional meetings, leveraging Spanish base.",
+  "goal": {
+    "domain": "italian language",
+    "sub_goal": "conversational Italian sufficient for professional meetings, leveraging Spanish base",
+    "current_level": "intermediate",
+    "desired_depth": "working",
+    "time_budget_hours": 40.0,
+    "preferred_modalities": []
+  },
+  "must_cover_keywords": ["grammar", "vocabulary"],
+  "min_units": 4,
+  "max_units": 8
+}

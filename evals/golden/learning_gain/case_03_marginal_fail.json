@@ -1,0 +1,8 @@
+{
+  "id": "learning_gain_03",
+  "description": "Attention intuition unit — marginal gain fails the 0.2 delta threshold.",
+  "domain": "neural_networks",
+  "pre_score": 0.55,
+  "post_score": 0.68,
+  "min_delta": 0.2
+}

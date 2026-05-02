@@ -1,0 +1,15 @@
+{
+  "id": "intent_nn_01",
+  "description": "ML learner with prior background wants conceptual understanding of a specific mechanism.",
+  "conversation": [
+    {"role": "user", "content": "I've built a few CNNs and understand backprop pretty well. What I don't get is attention — specifically why transformers scaled so much better than RNNs. I want intuition, not a full math derivation. I can spend a weekend, around 10 hours. Visual explanations help a lot."}
+  ],
+  "expected_goal": {
+    "domain": "machine learning",
+    "sub_goal": "intuition for attention mechanisms and why transformers outperformed RNNs",
+    "current_level": "intermediate",
+    "desired_depth": "working",
+    "time_budget_hours": 10.0,
+    "preferred_modalities": ["visual"]
+  }
+}

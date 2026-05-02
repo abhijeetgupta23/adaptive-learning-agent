@@ -1,0 +1,15 @@
+{
+  "id": "curriculum_nn_01",
+  "description": "Attention/transformer intuition for an intermediate ML practitioner.",
+  "goal": {
+    "domain": "machine learning",
+    "sub_goal": "intuition for attention mechanisms and why transformers outperformed RNNs",
+    "current_level": "intermediate",
+    "desired_depth": "working",
+    "time_budget_hours": 10.0,
+    "preferred_modalities": ["visual"]
+  },
+  "must_cover_keywords": ["attention", "transformer"],
+  "min_units": 3,
+  "max_units": 6
+}

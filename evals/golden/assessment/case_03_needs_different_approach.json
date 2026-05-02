@@ -1,0 +1,17 @@
+{
+  "id": "assessment_sql_03",
+  "description": "Learner still confused about the core idea — route to different pedagogy.",
+  "unit": {
+    "id": "u1",
+    "objective": "Distinguish INNER vs LEFT JOIN",
+    "prerequisites": [],
+    "recommended_pedagogy": "worked_example",
+    "grounding_sources": [{"url": "https://x.com/a", "title": "a"}]
+  },
+  "method": "worked_example",
+  "transcript": [
+    {"role": "assistant", "content": "Let's walk through: SELECT * FROM customers c LEFT JOIN orders o ON c.id = o.cid..."},
+    {"role": "user", "content": "I don't really get it. Is LEFT the same as INNER but backwards? Or is it when a table is on the left? Why does it even matter which side?"}
+  ],
+  "expected_verdict": "needs_different_approach"
+}

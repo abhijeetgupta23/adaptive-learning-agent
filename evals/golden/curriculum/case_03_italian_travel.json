@@ -1,0 +1,15 @@
+{
+  "id": "curriculum_italian_01",
+  "description": "Travel Italian for a two-week trip, cocktail depth.",
+  "goal": {
+    "domain": "italian language",
+    "sub_goal": "travel-level conversational Italian (ordering, directions, tickets)",
+    "current_level": "novice",
+    "desired_depth": "cocktail",
+    "time_budget_hours": 20.0,
+    "preferred_modalities": ["interactive", "verbal"]
+  },
+  "must_cover_keywords": ["greet", "order"],
+  "min_units": 4,
+  "max_units": 7
+}
