@@ -75,6 +75,13 @@ export type SSEEvent =
       method: TeachingMethod;
       content: string;
     }
+  | {
+      event: "assessment_question";
+      session_id: string;
+      unit_id: string;
+      question: string;
+      attempt: number;
+    }
   | { event: "assessment_result"; result: AssessmentResult }
   | ({ event: "cost_update" } & CostUpdate)
   | { event: "complete" }

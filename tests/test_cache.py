@@ -150,6 +150,62 @@ async def test_curriculum_ptc_caches_system_on_every_iteration() -> None:
         assert call["system"] == client.messages.calls[0]["system"]
 
 
+# -------- per-turn rolling cache --------
+
+def _last_user_msg(call: dict) -> dict:
+    for msg in reversed(call["messages"]):
+        if msg["role"] == "user":
+            return msg
+    raise AssertionError("no user message in call")
+
+
+def _last_block_has_cache_control(msg: dict) -> bool:
+    content = msg["content"]
+    if isinstance(content, list) and content:
+        return content[-1].get("cache_control") == {"type": "ephemeral"}
+    return False
+
+
+async def test_ptc_marks_rolling_cache_on_last_user_message() -> None:
+    """Each PTC iteration should place a cache_control breakpoint on the
+    most recent user message, so iteration N+1 hits the entry written by N."""
+    async def fake_search(inp: dict) -> list[dict]:
+        return [{"url": "https://x.com", "title": "t", "snippet": "s"}]
+
+    search_tool = Tool(
+        name="web_search", description="",
+        input_schema={"type": "object"}, handler=fake_search,
+    )
+    payload = {"units": [{
+        "id": "u1", "objective": "o", "prerequisites": [],
+        "recommended_pedagogy": "visual",
+        "grounding_sources": [{"url": "https://x.com", "title": "t", "snippet": "s"}],
+    }]}
+    client = FakeAnthropic([
+        tool_use_response("t1", "web_search", {"query": "x"}),
+        tool_use_response("t2", "web_search", {"query": "y"}),
+        text_response(json.dumps(payload)),
+    ])
+    goal = LearningGoal(
+        domain="d", sub_goal="s",
+        current_level=KnowledgeLevel.BEGINNER,
+        desired_depth=DesiredDepth.WORKING,
+        time_budget_hours=1.0,
+    )
+    from backend.agents.teaching.registry import build_teaching_registry
+    await build_curriculum(
+        goal, client=client, search_tool=search_tool,
+        teaching_registry=build_teaching_registry(client=client),
+    )
+
+    # Every iteration's request must mark the rolling cache breakpoint.
+    for call in client.messages.calls:
+        last_user = _last_user_msg(call)
+        assert _last_block_has_cache_control(last_user), (
+            f"missing rolling cache_control on last user msg: {last_user!r}"
+        )
+
+
 # -------- evaluators --------
 
 async def test_intent_fidelity_judge_caches_system() -> None:

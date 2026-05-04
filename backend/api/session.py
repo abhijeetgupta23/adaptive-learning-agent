@@ -12,6 +12,10 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sse_starlette.sse import EventSourceResponse
 
+from backend.agents.assessment import (
+    assess_understanding,
+    generate_assessment_question,
+)
 from backend.agents.curriculum import build_curriculum
 from backend.agents.intent import IntentCompleteResponse, intent_turn
 from backend.agents.memory import apply_assessment
@@ -21,6 +25,7 @@ from backend.orchestration.logging import new_request_id
 from backend.persistence.learner_state import load_learner_state, save_learner_state
 from backend.schemas.assessment import AssessmentResult, Verdict
 from backend.schemas.events import (
+    AssessmentQuestionEvent,
     AssessmentResultEvent,
     CompleteEvent,
     CostUpdateEvent,
@@ -52,8 +57,11 @@ class _PendingSession:
     # User answers to intent_ask events.
     response_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     # User verdicts after each teaching_chunk: pass / needs_reinforcement /
-    # needs_different_approach. Drives the per-unit re-teach loop.
+    # needs_different_approach. Used for the click-button verdict path.
     verdict_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
+    # User free-text answers to assessment_question events. Used for the
+    # interactive Q→A→verdict assessment path.
+    assessment_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
 
 
 # Module-level: lifetime is bounded by the SSE connection that owns it.
@@ -87,6 +95,10 @@ class VerdictRequest(BaseModel):
     ]
     diagnostic_notes: str = "User verdict."
     confidence: float = 1.0
+
+
+class AssessmentAnswerRequest(BaseModel):
+    answer: str = Field(min_length=1)
 
 
 async def _resolve_goal_via_intent(
@@ -160,6 +172,44 @@ async def _await_verdict(
         raise RuntimeError(f"Unknown verdict from user: {raw!r}") from exc
 
 
+async def _interactive_assessment(
+    *,
+    unit,
+    method,
+    teaching_content: str,
+    attempt: int,
+    session_id: str,
+    client,
+    assessment_queue: asyncio.Queue[str],
+) -> AsyncIterator[SSEEvent | AssessmentResult]:
+    """Interactive Q→A→verdict cycle for one unit attempt.
+
+    Yields:
+      - one AssessmentQuestionEvent (the agent's probe)
+      - then awaits the learner's free-text answer on assessment_queue
+      - finally yields an AssessmentResult (the verdict, derived by
+        assess_understanding from the learner's answer).
+    """
+    question = await generate_assessment_question(
+        unit, method, teaching_content, client=client,
+    )
+    yield AssessmentQuestionEvent(
+        session_id=session_id,
+        unit_id=unit.id,
+        question=question,
+        attempt=attempt,
+    )
+    answer = await assessment_queue.get()
+    transcript = [
+        {"role": "assistant", "content": question},
+        {"role": "user", "content": answer},
+    ]
+    result = await assess_understanding(
+        unit, method, transcript, client=client,
+    )
+    yield result
+
+
 async def run_session_stream(
     *,
     user_id: str,
@@ -170,6 +220,7 @@ async def run_session_stream(
     session_id: str,
     response_queue: asyncio.Queue[str] | None = None,
     verdict_queue: asyncio.Queue[str] | None = None,
+    assessment_queue: asyncio.Queue[str] | None = None,
     goal: LearningGoal | None = None,
     initial_message: str | None = None,
     additional_tools: list | None = None,
@@ -240,21 +291,43 @@ async def run_session_stream(
                 unit_id=unit.id, method=method, content=content,
             )
 
-            verdict = await _await_verdict(verdict_queue)
+            # Three paths to a verdict, in priority order:
+            # 1. Interactive Q→A→assess (preferred, closes the adaptive loop)
+            # 2. Click-button verdict (legacy fallback)
+            # 3. Auto-pass (tests / non-interactive)
+            if assessment_queue is not None:
+                result: AssessmentResult | None = None
+                async for ev in _interactive_assessment(
+                    unit=unit, method=method, teaching_content=content,
+                    attempt=attempt, session_id=session_id, client=client,
+                    assessment_queue=assessment_queue,
+                ):
+                    if isinstance(ev, AssessmentResult):
+                        result = ev
+                    else:
+                        yield ev
+                if result is None:
+                    raise RuntimeError(
+                        "Interactive assessment finished without a verdict."
+                    )
+                verdict = result.verdict
+            else:
+                verdict = await _await_verdict(verdict_queue)
+                notes = (
+                    f"User got it on attempt {attempt}."
+                    if verdict == Verdict.PASS
+                    else "Learner asked for more reinforcement on the same method."
+                    if verdict == Verdict.NEEDS_REINFORCEMENT
+                    else f"Learner rejected {method.value}; routing to a different method."
+                )
+                result = AssessmentResult(
+                    unit_id=unit.id,
+                    verdict=verdict,
+                    diagnostic_notes=notes,
+                    confidence=1.0,
+                )
+
             last_verdict = verdict
-            notes = (
-                "User got it on attempt "
-                f"{attempt}." if verdict == Verdict.PASS
-                else "Learner asked for more reinforcement on the same method."
-                if verdict == Verdict.NEEDS_REINFORCEMENT
-                else f"Learner rejected {method.value}; routing to a different method."
-            )
-            result = AssessmentResult(
-                unit_id=unit.id,
-                verdict=verdict,
-                diagnostic_notes=notes,
-                confidence=1.0,
-            )
             yield AssessmentResultEvent(result=result)
             state = apply_assessment(
                 state, unit=unit, method=method, result=result,
@@ -264,8 +337,7 @@ async def run_session_stream(
                 break
             if verdict == Verdict.NEEDS_DIFFERENT_APPROACH:
                 excluded_methods.append(method)
-            # NEEDS_REINFORCEMENT → loop with same method (router rule 1 may
-            # also surface a previously-effective method; that's fine).
+            # NEEDS_REINFORCEMENT → loop with same method.
         else:
             # MAX_TEACH_ATTEMPTS exhausted without a pass; record what we got.
             _logger.info(
@@ -319,6 +391,7 @@ async def run_session(request: Request, body: RunSessionRequest) -> EventSourceR
                         session_id=session_id,
                         response_queue=pending.response_queue,
                         verdict_queue=pending.verdict_queue,
+                        assessment_queue=pending.assessment_queue,
                         goal=body.goal,
                         initial_message=body.initial_message,
                         additional_tools=[wikipedia_tool] if wikipedia_tool else None,
@@ -370,6 +443,25 @@ async def verdict(session_id: str, body: VerdictRequest) -> dict[str, str]:
             detail=f"Session {session_id!r} not active or already finished.",
         )
     await pending.verdict_queue.put(body.verdict)
+    return {"status": "queued"}
+
+
+@router.post("/{session_id}/assessment-answer")
+async def assessment_answer(
+    session_id: str, body: AssessmentAnswerRequest,
+) -> dict[str, str]:
+    """Push the learner's free-text answer onto the assessment queue.
+
+    The session's per-unit assessment loop is paused on this queue between
+    `assessment_question` and `assessment_result` events.
+    """
+    pending = _pending_sessions.get(session_id)
+    if pending is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session {session_id!r} not active or already finished.",
+        )
+    await pending.assessment_queue.put(body.answer)
     return {"status": "queued"}
 
 

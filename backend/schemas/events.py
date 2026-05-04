@@ -26,6 +26,15 @@ class IntentAskEvent(BaseModel):
     question: str
 
 
+class AssessmentQuestionEvent(BaseModel):
+    """Assessment agent asks the learner a probing question after teaching."""
+    event: Literal["assessment_question"] = "assessment_question"
+    session_id: str
+    unit_id: str
+    question: str
+    attempt: int
+
+
 class CurriculumReadyEvent(BaseModel):
     event: Literal["curriculum_ready"] = "curriculum_ready"
     curriculum: Curriculum
@@ -73,6 +82,7 @@ SSEEvent = Annotated[
     | CurriculumReadyEvent
     | UnitStartedEvent
     | TeachingChunkEvent
+    | AssessmentQuestionEvent
     | AssessmentResultEvent
     | CostUpdateEvent
     | CompleteEvent

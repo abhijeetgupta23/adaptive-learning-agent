@@ -172,8 +172,34 @@ adaptive-learning-agent/
 └── tests/               pytest, all agents/evaluators/persistence covered
 ```
 
+## Deploy
+
+Configs ship for the most common PaaS combos; pick one for the backend, Vercel for the frontend.
+
+**Backend on Fly.io** (recommended):
+
+```bash
+fly launch --no-deploy           # claim the app name
+fly secrets set ANTHROPIC_API_KEY=sk-ant-... TAVILY_API_KEY=tvly-...
+fly secrets set ADAPTIVE_LEARNING_FRONTEND_ORIGIN=https://your-app.vercel.app
+fly deploy                       # uses backend/Dockerfile + fly.toml
+```
+
+**Backend on Railway**: connect the GitHub repo; Railway auto-detects `railway.json` (Dockerfile build). Set the same env vars in the dashboard.
+
+**Frontend on Vercel**: connect the GitHub repo, root = `frontend/`. Vercel auto-detects Next.js. Add one env var:
+
+```
+NEXT_PUBLIC_API_BASE_URL=https://<your-fly-or-railway-url>
+```
+
+After both are deployed, set `ADAPTIVE_LEARNING_FRONTEND_ORIGIN` on the backend to the Vercel URL so CORS allows it. Done — visit the Vercel URL.
+
+**Cost-free demo**: append `?fixture=1` to the deployed frontend URL. Replays a recorded session locally without hitting the backend at all.
+
 ## Further reading
 
+- [WRITEUP.md](WRITEUP.md) — design notes: PTC vs LangGraph, the MDA-grounded game agent, the prompt-cache gotcha, interactive assessment, roadmap
 - [ARCHITECTURE.md](ARCHITECTURE.md) — full agent topology, principles, evaluator details
 - [HANDOFF.md](HANDOFF.md) — original project brief and scope
 - [backend/orchestration/ptc.py](backend/orchestration/ptc.py) — the tool-use loop

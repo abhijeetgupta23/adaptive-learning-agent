@@ -50,6 +50,7 @@ interface DerivedUnit {
   status: UnitStatus;
   attemptCount: number;
   awaitingVerdict: boolean;
+  pendingAssessmentQuestion?: { question: string; attempt: number };
   plan?: TeachingPlan;
   teachingMethod?: TeachingMethod;
   teachingContent?: string;
@@ -93,6 +94,7 @@ function deriveSession(
       type StartedEv = Extract<SSEEvent, { event: "unit_started" }>;
       type TeachEv = Extract<SSEEvent, { event: "teaching_chunk" }>;
       type AssessEv = Extract<SSEEvent, { event: "assessment_result" }>;
+      type QuestionEv = Extract<SSEEvent, { event: "assessment_question" }>;
       const startedEvs = events.filter(
         (e): e is StartedEv => e.event === "unit_started" && e.unit_id === u.id,
       );
@@ -104,9 +106,14 @@ function deriveSession(
         (e): e is AssessEv =>
           e.event === "assessment_result" && e.result.unit_id === u.id,
       );
+      const questionEvs = events.filter(
+        (e): e is QuestionEv =>
+          e.event === "assessment_question" && e.unit_id === u.id,
+      );
       const lastStarted = startedEvs.at(-1);
       const lastTeaching = teachingEvs.at(-1);
       const lastAssess = assessEvs.at(-1);
+      const lastQuestion = questionEvs.at(-1);
 
       // Status logic:
       // - If any assessment is pass → done (terminal-positive).
@@ -136,6 +143,10 @@ function deriveSession(
         status = "active";
       }
 
+      const pendingQuestion =
+        questionEvs.length > assessEvs.length && lastQuestion
+          ? { question: lastQuestion.question, attempt: lastQuestion.attempt }
+          : undefined;
       units.push({
         id: u.id,
         index: i + 1,
@@ -147,9 +158,12 @@ function deriveSession(
         teachingMethod: lastTeaching?.method,
         teachingContent: lastTeaching?.content,
         assessment: lastAssess?.result,
-        // Awaiting verdict: latest teaching has rendered but no matching
-        // assessment yet. Drives the verdict-button gate in the UI.
-        awaitingVerdict: teachingEvs.length > assessEvs.length,
+        // Awaiting verdict: teaching rendered but no assessment yet AND no
+        // assessment_question is currently pending (those drive a different
+        // UI). Reserved for the legacy click-button verdict path.
+        awaitingVerdict:
+          teachingEvs.length > assessEvs.length && !pendingQuestion,
+        pendingAssessmentQuestion: pendingQuestion,
       });
     });
   }
@@ -247,6 +261,23 @@ export default function Home() {
         body: JSON.stringify({ verdict }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} on /verdict`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const submitAssessmentAnswer = async (answer: string) => {
+    if (!answer.trim() || !sessionId) return;
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/session/${sessionId}/assessment-answer`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answer }),
+        },
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status} on /assessment-answer`);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
     }
@@ -425,6 +456,7 @@ export default function Home() {
               verdictByUnit={verdictByUnit}
               onVerdict={recordVerdict}
               onAnswer={submitAnswer}
+              onAssessmentAnswer={submitAssessmentAnswer}
             />
           </div>
           {errorMsg && <ErrorBanner msg={errorMsg} />}
@@ -790,6 +822,7 @@ function MainPane({
   verdictByUnit,
   onVerdict,
   onAnswer,
+  onAssessmentAnswer,
 }: {
   session: DerivedSession;
   focusedIdx: number;
@@ -797,6 +830,7 @@ function MainPane({
   verdictByUnit: Record<string, Verdict>;
   onVerdict: (unitId: string, verdict: Verdict) => void;
   onAnswer: (answer: string) => void;
+  onAssessmentAnswer: (answer: string) => void;
 }) {
   // HITL question takes priority over unit content
   if (session.pendingQuestion) {
@@ -819,6 +853,34 @@ function MainPane({
   const isActiveUnit = focusedIdx === session.activeUnitIdx;
   const showSummary = session.complete && unit.status === "done";
 
+  // Footer below teaching: priority is interactive assessment > verdict buttons
+  // > rendered assessment result.
+  let footer: React.ReactNode = null;
+  if (unit.pendingAssessmentQuestion && isActiveUnit) {
+    footer = (
+      <AssessmentAnswerPanel
+        question={unit.pendingAssessmentQuestion.question}
+        attempt={unit.pendingAssessmentQuestion.attempt}
+        onSubmit={onAssessmentAnswer}
+      />
+    );
+  } else if (unit.awaitingVerdict) {
+    footer = (
+      <VerdictButtons
+        unitId={unit.id}
+        chosen={verdictByUnit[unit.id]}
+        onPick={(v) => onVerdict(unit.id, v)}
+      />
+    );
+  } else if (unit.assessment) {
+    footer = (
+      <UnitAssessmentView
+        assessment={unit.assessment}
+        override={verdictByUnit[unit.id]}
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <UnitHeader unit={unit} session={session} />
@@ -826,21 +888,64 @@ function MainPane({
         <SessionSummaryCallout session={session} />
       )}
       <UnitTeachingView unit={unit} running={running && isActiveUnit} />
-      {unit.awaitingVerdict ? (
-        <VerdictButtons
-          unitId={unit.id}
-          chosen={verdictByUnit[unit.id]}
-          onPick={(v) => onVerdict(unit.id, v)}
-        />
-      ) : (
-        unit.assessment && (
-          <UnitAssessmentView
-            assessment={unit.assessment}
-            override={verdictByUnit[unit.id]}
-          />
-        )
-      )}
+      {footer}
     </div>
+  );
+}
+
+function AssessmentAnswerPanel({
+  question,
+  attempt,
+  onSubmit,
+}: {
+  question: string;
+  attempt: number;
+  onSubmit: (answer: string) => void;
+}) {
+  const [val, setVal] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const submit = () => {
+    const v = val.trim();
+    if (!v || submitted) return;
+    setSubmitted(true);
+    onSubmit(v);
+  };
+  return (
+    <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 card-in">
+      <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-amber-400">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-400 pulse-dot" />
+        Quick check
+        {attempt > 1 && (
+          <span className="text-[10px] text-amber-300/70">
+            · attempt {attempt}
+          </span>
+        )}
+      </div>
+      <p className="mb-3 text-sm leading-relaxed text-slate-100">{question}</p>
+      <textarea
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+        }}
+        rows={3}
+        disabled={submitted}
+        placeholder="Type your answer in your own words…"
+        className="w-full resize-none rounded-lg border border-amber-700/50 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 disabled:opacity-50"
+      />
+      <div className="mt-3 flex items-center justify-between">
+        <div className="text-[11px] text-slate-500">
+          {submitted ? "Sent — agent is grading…" : "⌘/Ctrl + Enter to send"}
+        </div>
+        <button
+          onClick={submit}
+          disabled={submitted || !val.trim()}
+          className="rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:from-amber-400 hover:to-orange-400"
+        >
+          {submitted ? "Sent" : "Send"}
+        </button>
+      </div>
+    </section>
   );
 }
 

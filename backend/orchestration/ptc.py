@@ -47,6 +47,48 @@ def _serialize_block(block: Any) -> dict[str, Any]:
     raise PTCError(f"Unknown content block type: {btype!r}")
 
 
+def _with_rolling_cache_breakpoint(
+    history: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Place a `cache_control: ephemeral` marker on the last block of the
+    most recent user message.
+
+    On each PTC iteration this writes a new cache entry at the growing tail
+    of the conversation. The next iteration's request reads it via Anthropic's
+    20-block lookback window. Combined with the system-prompt breakpoint
+    (auto-wrapped by `normalize_system`), this gives us up to 2 of the 4
+    available breakpoints per request — enough for SP + rolling tail.
+
+    We skip the marker when the message's content is empty or the last block
+    is already a cached one (idempotent).
+    """
+    if not history:
+        return history
+    out = [dict(m) for m in history]
+    for i in range(len(out) - 1, -1, -1):
+        msg = out[i]
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            msg["content"] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        elif isinstance(content, list) and content:
+            new_blocks = [dict(b) for b in content]
+            last = new_blocks[-1]
+            if "cache_control" not in last:
+                last["cache_control"] = {"type": "ephemeral"}
+            new_blocks[-1] = last
+            msg["content"] = new_blocks
+        break
+    return out
+
+
 async def run_ptc(
     client: AnthropicLike,
     *,
@@ -66,7 +108,7 @@ async def run_ptc(
     for iteration in range(1, max_iterations + 1):
         call_kwargs: dict[str, Any] = {
             "model": model,
-            "messages": history,
+            "messages": _with_rolling_cache_breakpoint(history),
             "max_tokens": max_tokens,
         }
         if cached_system_value is not None:

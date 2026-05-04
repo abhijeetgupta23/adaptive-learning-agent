@@ -45,6 +45,23 @@ Return JSON exactly, no prose outside:
 }
 """
 
+ASSESSMENT_QUESTION_SYSTEM_PROMPT = """\
+You are the Assessment Agent's question-writer. Given a unit's objective and the \
+teaching content the learner just saw, write ONE probing question that surfaces \
+whether they actually understood the *core* of the unit, not the surface.
+
+Constraints:
+- ONE question, 1-3 sentences. No multi-part with sub-bullets.
+- Open-ended: avoid yes/no. Ask them to *apply*, *predict*, *trace*, or *explain*.
+- Specific to the unit: reference a concrete element from the teaching content \
+when possible (a variable name, a step in a trace, a piece of code).
+- Calibrated to the unit's depth: novice questions are recall + simple apply; \
+intermediate are trace + predict; expert are extend + critique.
+- DO NOT prepend "Question:" or any framing. Just the question text.
+
+Return PLAIN TEXT only — no JSON, no markdown, no quotes around the question.
+"""
+
 
 class AssessmentAgentError(Exception):
     """Raised when the Assessment Agent's output cannot be parsed."""
@@ -70,6 +87,52 @@ def _build_user_message(
         "Teaching interaction transcript:\n"
         f"{_format_transcript(transcript)}"
     )
+
+
+async def generate_assessment_question(
+    unit: LearningUnit,
+    method: TeachingMethod,
+    teaching_content: str,
+    *,
+    client: AnthropicLike,
+    model: str = DEFAULT_MODEL,
+    max_tokens: int = 256,
+) -> str:
+    """Produce one probing question for the learner about this unit.
+
+    The question is asked AFTER the teaching has been presented; the learner's
+    answer is then evaluated by `assess_understanding`. Together they form the
+    interactive-assessment Q→A→verdict loop.
+    """
+    user_msg = (
+        f"Unit objective: {unit.objective}\n"
+        f"Method used: {method.value}\n\n"
+        "Teaching content the learner just saw (truncated):\n"
+        f"{teaching_content[:2000]}"
+    )
+    response = await client.messages.create(
+        model=model,
+        system=cached_system(ASSESSMENT_QUESTION_SYSTEM_PROMPT),
+        messages=[{"role": "user", "content": user_msg}],
+        max_tokens=max_tokens,
+    )
+    record_usage(model=model, agent="assessment", response=response)
+    try:
+        text = extract_text(response).strip()
+    except StructuredOutputError as exc:
+        raise AssessmentAgentError(str(exc)) from exc
+    if not text:
+        raise AssessmentAgentError("Question agent returned empty text.")
+    # Strip surrounding quotes if the model wrapped it.
+    if (text.startswith('"') and text.endswith('"')) or (
+        text.startswith("'") and text.endswith("'")
+    ):
+        text = text[1:-1].strip()
+    _logger.info(
+        "assessment_question_generated",
+        extra={"unit_id": unit.id, "chars": len(text)},
+    )
+    return text
 
 
 async def assess_understanding(

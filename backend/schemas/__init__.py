@@ -1,6 +1,7 @@
 from backend.schemas.assessment import AssessmentResult, Verdict
 from backend.schemas.curriculum import Curriculum, GroundingSource, LearningUnit
 from backend.schemas.events import (
+    AssessmentQuestionEvent,
     AssessmentResultEvent,
     CompleteEvent,
     CostUpdateEvent,
@@ -19,6 +20,7 @@ from backend.schemas.state import LearnerState
 from backend.schemas.teaching import MethodCall, TeachingMethod, TeachingPlan
 
 __all__ = [
+    "AssessmentQuestionEvent",
     "AssessmentResult",
     "AssessmentResultEvent",
     "CompleteEvent",

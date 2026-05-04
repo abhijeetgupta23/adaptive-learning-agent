@@ -1,0 +1,16 @@
+# Keep the backend image small — exclude everything not needed at runtime.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+.env
+.env.*
+tests/
+*.db
+adaptive_learning.db
+.playwright-mcp/
+node_modules/

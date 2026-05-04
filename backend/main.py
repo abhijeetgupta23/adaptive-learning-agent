@@ -67,14 +67,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="adaptive-learning-agent", version="0.1.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# Default CORS to wildcard so a fresh deploy works before the frontend URL is
+# known. Set ADAPTIVE_LEARNING_FRONTEND_ORIGIN once the Vercel URL exists to
+# narrow this down to that exact origin (the production-grade setup).
+_explicit_origin = os.getenv("ADAPTIVE_LEARNING_FRONTEND_ORIGIN")
+_cors_origins = (
+    [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
-    ],
+        _explicit_origin,
+    ]
+    if _explicit_origin
+    else ["*"]
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    # Wildcard origin can't combine with credentials per the CORS spec, so we
+    # only enable credentials when an explicit origin is set.
+    allow_credentials=bool(_explicit_origin),
     allow_methods=["*"],
     allow_headers=["*"],
 )
