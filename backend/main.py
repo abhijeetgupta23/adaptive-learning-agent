@@ -21,10 +21,7 @@ from backend.persistence import (  # noqa: E402
     init_db,
     make_session_factory,
 )
-from backend.retrieval import (  # noqa: E402
-    build_web_search_tool,
-    build_wikipedia_search_tool,
-)
+from backend.retrieval import build_wikipedia_search_tool  # noqa: E402
 
 
 @asynccontextmanager
@@ -45,12 +42,12 @@ async def lifespan(app: FastAPI):
     else:
         app.state.anthropic = None
 
-    if os.getenv("TAVILY_API_KEY"):
-        app.state.search_tool = build_web_search_tool()
-    else:
-        app.state.search_tool = None
+    # Curriculum agent uses Anthropic's server-side web_search by default
+    # (no separate vendor key needed). The `search_tool` slot is kept on
+    # app.state for tests that inject a local fake.
+    app.state.search_tool = None
 
-    # Wikipedia is a second grounding source. No API key required.
+    # Wikipedia stays as a second grounding source — no API key required.
     app.state.wikipedia_tool = build_wikipedia_search_tool()
 
     # Teaching skill registry: built once, holds frontmatter for all methods.

@@ -34,15 +34,42 @@ class PTCResult:
 
 
 def _serialize_block(block: Any) -> dict[str, Any]:
+    """Serialize one content block from a model response into the dict shape we
+    can append back to `messages` on subsequent iterations.
+
+    Handles:
+      - `text` (with optional citations from server tools)
+      - `tool_use` (regular client-side tools we execute)
+      - `server_tool_use` (e.g. web_search — Anthropic executes server-side)
+      - `web_search_tool_result` (the result block Anthropic emits inline)
+    """
     btype = getattr(block, "type", None)
     if btype == "text":
-        return {"type": "text", "text": getattr(block, "text", "")}
+        out: dict[str, Any] = {"type": "text", "text": getattr(block, "text", "")}
+        citations = getattr(block, "citations", None)
+        if citations:
+            # Pass citations through so multi-turn requests preserve them.
+            out["citations"] = citations
+        return out
     if btype == "tool_use":
         return {
             "type": "tool_use",
             "id": getattr(block, "id"),
             "name": getattr(block, "name"),
             "input": getattr(block, "input", {}),
+        }
+    if btype == "server_tool_use":
+        return {
+            "type": "server_tool_use",
+            "id": getattr(block, "id"),
+            "name": getattr(block, "name"),
+            "input": getattr(block, "input", {}),
+        }
+    if btype == "web_search_tool_result":
+        return {
+            "type": "web_search_tool_result",
+            "tool_use_id": getattr(block, "tool_use_id"),
+            "content": getattr(block, "content", []),
         }
     raise PTCError(f"Unknown content block type: {btype!r}")
 
@@ -96,6 +123,7 @@ async def run_ptc(
     messages: list[dict[str, Any]],
     system: str | list[dict[str, Any]] | None = None,
     tools: ToolRegistry | None = None,
+    server_tools: list[dict[str, Any]] | None = None,
     max_iterations: int = 10,
     max_tokens: int = 4096,
     agent: str = "ptc",
@@ -113,8 +141,18 @@ async def run_ptc(
         }
         if cached_system_value is not None:
             call_kwargs["system"] = cached_system_value
+        # Combine client-side tools (via ToolRegistry) with server-side tools
+        # (e.g. Anthropic's web_search). Server tools are executed by Anthropic
+        # and their results arrive inline in the same response — we don't run
+        # any handler for them, but we DO need to serialize the resulting
+        # blocks back into history (see _serialize_block).
+        all_tool_specs: list[dict[str, Any]] = []
         if tools and tools.tools:
-            call_kwargs["tools"] = tools.as_anthropic_specs()
+            all_tool_specs.extend(tools.as_anthropic_specs())
+        if server_tools:
+            all_tool_specs.extend(server_tools)
+        if all_tool_specs:
+            call_kwargs["tools"] = all_tool_specs
 
         start = time.monotonic()
         response = await client.messages.create(**call_kwargs)

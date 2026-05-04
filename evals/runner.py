@@ -28,7 +28,6 @@ from backend.agents.pedagogy_router import route_pedagogy
 from backend.orchestration.anthropic_client import get_anthropic_client
 from backend.orchestration.logging import configure_logging
 from backend.orchestration.ptc import AnthropicLike
-from backend.retrieval.search_tool import build_web_search_tool
 from backend.schemas.assessment import Verdict
 from backend.schemas.curriculum import LearningUnit
 from backend.schemas.goal import LearningGoal
@@ -297,13 +296,11 @@ def main(argv: list[str] | None = None) -> int:
     selected = EVALUATORS if args.all else [args.evaluator]
 
     client = None
-    search_tool = None
     if os.getenv("ANTHROPIC_API_KEY"):
         client = get_anthropic_client()
-    if os.getenv("TAVILY_API_KEY"):
-        search_tool = build_web_search_tool()
-
-    report = asyncio.run(run_selected(selected, client=client, search_tool=search_tool))
+    # `search_tool=None` makes the curriculum agent fall back to Anthropic's
+    # server-side web_search — no separate vendor key needed.
+    report = asyncio.run(run_selected(selected, client=client, search_tool=None))
 
     print(summarize(report))
 

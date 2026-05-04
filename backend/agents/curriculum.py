@@ -100,8 +100,8 @@ async def build_curriculum(
     goal: LearningGoal,
     *,
     client: AnthropicLike,
-    search_tool: Tool,
     teaching_registry: SkillRegistry,
+    search_tool: Tool | None = None,
     additional_tools: list[Tool] | None = None,
     model: str = DEFAULT_MODEL,
     max_iterations: int = 10,
@@ -109,14 +109,33 @@ async def build_curriculum(
 ) -> Curriculum:
     """Research + plan a grounded curriculum for the given goal.
 
-    `search_tool` is the primary grounding source (Tavily). `additional_tools`
-    can supply complementary backends (e.g. Wikipedia); the curriculum LLM
-    sees all of them and picks per-query based on each tool's description.
+    Grounding comes from one of two paths:
+      - **Production**: Anthropic's server-side `web_search` tool. No extra
+        vendor key required; Anthropic executes the searches and returns
+        results inline. See [web search docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool).
+      - **Tests / local dev**: pass `search_tool` (a client-side `Tool` whose
+        handler we run locally — used by `FakeAnthropic` mocks).
+
+    `additional_tools` (e.g. Wikipedia) compose with either path.
     """
     tool_registry = ToolRegistry()
-    tool_registry.register(search_tool)
+    if search_tool is not None:
+        tool_registry.register(search_tool)
     for tool in additional_tools or []:
         tool_registry.register(tool)
+
+    # If no client-side search tool was provided, register Anthropic's
+    # server-side web_search instead. They share the name `web_search` so the
+    # curriculum prompt's reference doesn't have to branch.
+    server_tools: list[dict[str, Any]] | None = None
+    if search_tool is None:
+        server_tools = [
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 5,
+            }
+        ]
 
     result = await run_ptc(
         client,
@@ -124,6 +143,7 @@ async def build_curriculum(
         system=build_curriculum_system_prompt(teaching_registry),
         messages=[{"role": "user", "content": _build_user_message(goal)}],
         tools=tool_registry,
+        server_tools=server_tools,
         max_iterations=max_iterations,
         max_tokens=max_tokens,
         agent="curriculum",

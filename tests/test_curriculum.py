@@ -6,8 +6,6 @@ import pytest
 from backend.agents.curriculum import CurriculumAgentError, build_curriculum
 from backend.agents.teaching.registry import build_teaching_registry
 from backend.orchestration.tools import Tool
-from backend.retrieval.search_tool import build_web_search_tool
-from backend.retrieval.tavily import search_web
 from backend.schemas import (
     Curriculum,
     DesiredDepth,
@@ -129,31 +127,6 @@ async def test_build_curriculum_rejects_malformed_unit() -> None:
         _goal(), client=client, search_tool=search_tool,
         teaching_registry=build_teaching_registry(client=client),
     )
-
-
-# -------- Search tool --------
-
-async def test_web_search_tool_returns_structured_results() -> None:
-    class FakeTavily:
-        async def search(self, **kwargs):
-            return {"results": [
-                {"url": "https://a.com", "title": "A", "content": "alpha content"},
-                {"url": "https://b.com", "title": "B", "content": "beta content"},
-            ]}
-
-    results = await search_web("x", client=FakeTavily())
-    assert len(results) == 2
-    assert results[0] == {"url": "https://a.com", "title": "A", "snippet": "alpha content"}
-
-
-async def test_build_web_search_tool_callable_via_registry() -> None:
-    class FakeTavily:
-        async def search(self, **kwargs):
-            return {"results": [{"url": "https://a.com", "title": "A", "content": "c"}]}
-
-    tool = build_web_search_tool(client=FakeTavily())
-    result = await tool.handler({"query": "joins"})
-    assert result[0]["url"] == "https://a.com"
 
 
 # -------- Grounding evaluator --------

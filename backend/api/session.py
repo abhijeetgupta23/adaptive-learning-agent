@@ -371,13 +371,10 @@ async def run_session(request: Request, body: RunSessionRequest) -> EventSourceR
 
     async def event_generator():
         try:
-            if client is None or search_tool is None:
-                missing = []
-                if client is None:
-                    missing.append("ANTHROPIC_API_KEY")
-                if search_tool is None:
-                    missing.append("TAVILY_API_KEY")
-                err = ErrorEvent(message=f"Server missing env vars: {', '.join(missing)}")
+            if client is None:
+                err = ErrorEvent(
+                    message="Server missing env var: ANTHROPIC_API_KEY",
+                )
                 yield {"data": err.model_dump_json()}
                 return
             with session_accumulator() as acc:
