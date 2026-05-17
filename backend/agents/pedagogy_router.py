@@ -9,7 +9,7 @@ from backend.agents._parsing import (
     parse_json_payload,
 )
 from backend.orchestration.cache import cached_system
-from backend.orchestration.cost import record_usage
+from backend.orchestration.cost import CallTimer, record_usage
 from backend.orchestration.ptc import AnthropicLike
 from backend.schemas.curriculum import LearningUnit
 from backend.schemas.state import LearnerState
@@ -18,7 +18,7 @@ from backend.skills import SkillRegistry
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_LLM_MODEL = "claude-sonnet-4-6"
+DEFAULT_LLM_MODEL = "claude-haiku-4-5-20251001"
 
 _ROUTER_LLM_SYSTEM_PROMPT_TEMPLATE = """\
 You are the Pedagogy Router. Pick the best teaching method for this unit, given \
@@ -34,18 +34,17 @@ Return JSON exactly:
 """
 
 # Legacy fallback used when no skill registry is supplied (e.g. older tests).
+# Vision B: only `game` and `worked_example` are real. Game is the flagship;
+# worked_example is the silent fallback for concepts that don't map to a game.
 _LEGACY_ROUTER_PROMPT = """\
 You are the Pedagogy Router. Pick the best teaching method for this unit, given \
 the learner's state.
 
 Guidance:
-- worked_example: step-by-step procedures, algorithms, SQL queries
-- analogy: novel abstractions mapped to familiar ones
-- visual: relational, topological, or spatial concepts
-- game: concepts that are games-at-heart (state, rules, transitions, strategy)
-- socratic: fuzzy conceptual understanding the learner must construct
-- feynman: the learner should be able to teach it back
-- retrieval: vocabulary, facts, rote memorization
+- game: the default. Concepts that can be taught through interaction (state, \
+rules, transitions, strategy, sequencing, comparison, selection).
+- worked_example: fallback only. Step-by-step procedures, derivations, or \
+proofs that resist game-ification.
 
 Return JSON exactly:
 
@@ -140,13 +139,19 @@ async def _llm_choose(
         f"- mastered concepts: {state.mastered_concepts[:10]}\n"
         f"- previously struggled: {state.struggled_concepts[:10]}\n"
     )
-    response = await client.messages.create(
+    with CallTimer() as _t:
+        response = await client.messages.create(
+            model=model,
+            system=cached_system(build_router_system_prompt(teaching_registry)),
+            messages=[{"role": "user", "content": user_message}],
+            max_tokens=512,
+        )
+    record_usage(
         model=model,
-        system=cached_system(build_router_system_prompt(teaching_registry)),
-        messages=[{"role": "user", "content": user_message}],
-        max_tokens=512,
+        agent="pedagogy_router",
+        response=response,
+        latency_ms=_t.elapsed_ms,
     )
-    record_usage(model=model, agent="pedagogy_router", response=response)
     try:
         text = extract_text(response)
         payload: dict[str, Any] = parse_json_payload(text)

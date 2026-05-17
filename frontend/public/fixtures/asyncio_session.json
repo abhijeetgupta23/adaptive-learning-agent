@@ -1,6 +1,6 @@
 {
   "name": "asyncio_scheduler",
-  "description": "Recorded shape of an end-to-end session for the asyncio topic. Game iframe is a compact hand-authored demo. Use ?fixture=1 to replay locally without hitting the backend.",
+  "description": "Vision-B fixture replay for the asyncio topic. Game iframe (unit 3) is a hand-authored micro-game. Other units use worked_example as the Vision-B fallback. Costs recalibrated for Haiku-first (Haiku 4.5 = ~3x cheaper than Sonnet 4.6). Use ?fixture=1 to replay locally without hitting the backend.",
   "events": [
     {"event": "session_started", "session_id": "fixture-1"},
     {
@@ -10,8 +10,8 @@
     },
     {
       "event": "cost_update",
-      "total_usd": 0.003,
-      "by_agent": {"intent": 0.003},
+      "total_usd": 0.001,
+      "by_agent": {"intent": 0.001},
       "cache_hit_rate": 0.0,
       "call_count": 1
     },
@@ -43,7 +43,7 @@
             "id": "u1",
             "objective": "Map the actors: event loop, coroutine, Task, Future, awaitable",
             "prerequisites": [],
-            "recommended_pedagogy": "analogy",
+            "recommended_pedagogy": "worked_example",
             "grounding_sources": [
               {"url": "https://docs.python.org/3/library/asyncio-task.html", "title": "asyncio Tasks", "snippet": "Tasks wrap coroutines and let them run on the event loop."}
             ]
@@ -70,7 +70,7 @@
             "id": "u4",
             "objective": "Connect the dots: explain when control returns to the loop",
             "prerequisites": ["u3"],
-            "recommended_pedagogy": "feynman",
+            "recommended_pedagogy": "worked_example",
             "grounding_sources": [
               {"url": "https://docs.python.org/3/library/asyncio-eventloop.html", "title": "Event loop reference", "snippet": "Control returns when a coroutine yields or completes."}
             ]
@@ -80,8 +80,8 @@
     },
     {
       "event": "cost_update",
-      "total_usd": 0.117,
-      "by_agent": {"intent": 0.003, "curriculum": 0.114},
+      "total_usd": 0.039,
+      "by_agent": {"intent": 0.001, "curriculum": 0.038},
       "cache_hit_rate": 0.0,
       "call_count": 4
     },
@@ -90,15 +90,15 @@
       "unit_id": "u1",
       "plan": {
         "unit_id": "u1",
-        "methods": [{"method": "analogy", "params": {}}],
-        "rationale": "Using curriculum-recommended pedagogy."
+        "methods": [{"method": "worked_example", "params": {}}],
+        "rationale": "Conceptual mapping resists game-ification → worked_example fallback."
       }
     },
     {
       "event": "teaching_chunk",
       "unit_id": "u1",
-      "method": "analogy",
-      "content": "[Demo analogy teaching for: Map the actors: event loop, coroutine, Task, Future, awaitable]"
+      "method": "worked_example",
+      "content": "# The Five Actors of asyncio\n\nBefore tracing `await`, name the players. asyncio's vocabulary trips most people because the names overlap — every Task *is* a Future, every coroutine *is* an awaitable. Here's the hierarchy from most concrete to most abstract.\n\n## 1. The event loop\n\n```python\nloop = asyncio.get_event_loop()\n# Or, since 3.7+:\nasyncio.run(main())   # ← creates a loop, runs main, closes loop\n```\n\nThe **infinite loop** that calls `select()`, dispatches ready callbacks, and resumes paused coroutines. There is exactly one per thread. Everything else exists to be scheduled on it.\n\n## 2. The coroutine\n\n```python\nasync def fetch():\n    response = await http_get(\"/x\")\n    return response.body\n\ncoro = fetch()        # ← coroutine object (not yet running!)\n```\n\nCalling an `async def` function returns a **coroutine object** — a paused generator. It runs only when something calls `coro.send(None)`. The loop does that for you (via a Task).\n\n## 3. The Task\n\n```python\ntask = asyncio.create_task(fetch())   # ← schedules coro on the loop\n```\n\nA **Task wraps a coroutine** and tells the loop \"drive this for me.\" Tasks are the unit of concurrency — every awaited async function call that should run independently lives in a Task. `asyncio.run` wraps your top-level coroutine in a Task automatically.\n\n## 4. The Future\n\n```python\nfut = loop.create_future()\nloop.call_later(1.0, fut.set_result, \"hello\")\nresult = await fut    # ← waits until set_result fires\n```\n\nA **Future is a placeholder for a value that doesn't exist yet** — set once, awaited many. It's the lowest-level pause primitive. **Every Task is a Future** (`Task` subclasses `Future`); the inverse is not true.\n\n## 5. The awaitable\n\nAnything with an `__await__` method, which means: coroutines, Tasks, Futures, and anything you build that implements the protocol. The `await` keyword only cares about this contract.\n\n## How they nest\n\n```\nevent loop\n  ├─ Task (wraps & drives a coroutine)\n  │    └─ coroutine (yields Futures when it hits `await`)\n  │         └─ Future (the actual pause point)\n  └─ Task (another concurrent coroutine)\n       └─ coroutine\n            └─ Future\n```\n\nKeep this mental model close — the next unit traces exactly what happens when the coroutine hits `await` and the chain unwinds back to the loop."
     },
     {
       "event": "assessment_result",
@@ -110,12 +110,19 @@
       }
     },
     {
+      "event": "cost_update",
+      "total_usd": 0.049,
+      "by_agent": {"intent": 0.001, "curriculum": 0.038, "worked_example": 0.010},
+      "cache_hit_rate": 0.04,
+      "call_count": 5
+    },
+    {
       "event": "unit_started",
       "unit_id": "u2",
       "plan": {
         "unit_id": "u2",
         "methods": [{"method": "worked_example", "params": {}}],
-        "rationale": "Using curriculum-recommended pedagogy."
+        "rationale": "Stepwise generator-protocol trace fits worked_example."
       }
     },
     {
@@ -135,10 +142,10 @@
     },
     {
       "event": "cost_update",
-      "total_usd": 0.146,
-      "by_agent": {"intent": 0.003, "curriculum": 0.114, "worked_example": 0.029},
-      "cache_hit_rate": 0.05,
-      "call_count": 5
+      "total_usd": 0.059,
+      "by_agent": {"intent": 0.001, "curriculum": 0.038, "worked_example": 0.020},
+      "cache_hit_rate": 0.08,
+      "call_count": 6
     },
     {
       "event": "unit_started",
@@ -146,7 +153,7 @@
       "plan": {
         "unit_id": "u3",
         "methods": [{"method": "game", "params": {}}],
-        "rationale": "Using curriculum-recommended pedagogy."
+        "rationale": "FIFO scheduling is a game-shaped concept — flagship pedagogy."
       }
     },
     {
@@ -166,25 +173,25 @@
     },
     {
       "event": "cost_update",
-      "total_usd": 0.514,
-      "by_agent": {"intent": 0.003, "curriculum": 0.114, "worked_example": 0.029, "game": 0.368},
-      "cache_hit_rate": 0.158,
-      "call_count": 13
+      "total_usd": 0.182,
+      "by_agent": {"intent": 0.001, "curriculum": 0.038, "worked_example": 0.020, "game": 0.123},
+      "cache_hit_rate": 0.18,
+      "call_count": 14
     },
     {
       "event": "unit_started",
       "unit_id": "u4",
       "plan": {
         "unit_id": "u4",
-        "methods": [{"method": "feynman", "params": {}}],
-        "rationale": "Using curriculum-recommended pedagogy."
+        "methods": [{"method": "worked_example", "params": {}}],
+        "rationale": "Synthesis prose fits worked_example better than a game."
       }
     },
     {
       "event": "teaching_chunk",
       "unit_id": "u4",
-      "method": "feynman",
-      "content": "[Demo feynman teaching for: Connect the dots: explain when control returns to the loop]"
+      "method": "worked_example",
+      "content": "# When Does Control Return to the Event Loop?\n\nThree cases, in order of how common they are in real code.\n\n## 1. The coroutine awaits a Future that isn't done yet\n\n```python\nresponse = await http_client.get(url)   # ← suspends until socket has data\n```\n\nThe coroutine yields the Future. The Task records it, returns control to the loop. The loop calls `select()` until something — usually a socket readable, a timer firing, or another Task setting the result — wakes the Future. Loop then sends the result back into the coroutine.\n\n**This is the only case that lets other coroutines run.**\n\n## 2. The coroutine yields explicitly with `asyncio.sleep(0)`\n\n```python\nfor item in huge_list:\n    process(item)\n    await asyncio.sleep(0)   # ← \"please give someone else a turn\"\n```\n\n`asyncio.sleep(0)` is a special case: it schedules a callback for *immediately*, then yields. The loop runs other ready Tasks for one tick, then resumes you. Use it inside long synchronous loops to keep the event loop responsive.\n\n## 3. The coroutine completes (or raises)\n\n```python\nasync def fetch():\n    return await client.get(\"/\")   # ← when this returns, Task completes\n```\n\n`StopIteration(value)` propagates back to `Task.__step`. The Task sets its own result and removes itself from the loop's active set. The loop moves on.\n\n---\n\n## When does control NOT return?\n\n**Sync code never yields.** This is the #1 production bug:\n\n```python\nasync def bad():\n    response = requests.get(url)   # ← BLOCKS the entire event loop\n    return response.json()\n```\n\n`requests.get` is synchronous. It calls `socket.recv()`, which blocks the thread until data arrives. The event loop runs in that thread. **Nothing else runs.** Every other coroutine is frozen until `requests` returns. Diagnostic in prod: latency p99 on unrelated endpoints spikes whenever this codepath runs.\n\nFix: use `aiohttp` / `httpx.AsyncClient`, or wrap with `loop.run_in_executor(None, requests.get, url)`.\n\n## The mental model to keep\n\nThe loop is **cooperative**. Control returns only when a coroutine voluntarily yields. CPU-bound work in a coroutine starves every other Task in the program. When you're debugging \"why is my async app slow,\" the answer is almost always: someone forgot to `await`, or someone called sync I/O."
     },
     {
       "event": "assessment_result",
@@ -197,10 +204,10 @@
     },
     {
       "event": "cost_update",
-      "total_usd": 0.516,
-      "by_agent": {"intent": 0.006, "curriculum": 0.114, "worked_example": 0.029, "game": 0.368},
-      "cache_hit_rate": 0.158,
-      "call_count": 14
+      "total_usd": 0.193,
+      "by_agent": {"intent": 0.002, "curriculum": 0.038, "worked_example": 0.030, "game": 0.123},
+      "cache_hit_rate": 0.21,
+      "call_count": 15
     },
     {"event": "complete"}
   ],

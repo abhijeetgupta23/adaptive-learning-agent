@@ -66,6 +66,14 @@ class CostUpdateEvent(BaseModel):
     call_count: int
 
 
+class CircuitBreakerTrippedEvent(BaseModel):
+    """Game-agent circuit breaker has tripped; remaining units fall back to
+    worked_example for this session."""
+    event: Literal["circuit_breaker_tripped"] = "circuit_breaker_tripped"
+    reason: str
+    fallback_method: TeachingMethod = TeachingMethod.WORKED_EXAMPLE
+
+
 class CompleteEvent(BaseModel):
     event: Literal["complete"] = "complete"
 
@@ -85,6 +93,7 @@ SSEEvent = Annotated[
     | AssessmentQuestionEvent
     | AssessmentResultEvent
     | CostUpdateEvent
+    | CircuitBreakerTrippedEvent
     | CompleteEvent
     | ErrorEvent,
     Field(discriminator="event"),

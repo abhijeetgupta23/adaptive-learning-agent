@@ -26,7 +26,10 @@ from backend.schemas.curriculum import LearningUnit
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+# Haiku-first: gated by `game_quality` eval. Fall back to Sonnet only where
+# the eval shows Haiku underperforms. Comparison script:
+#   uv run python -m evals.game_model_compare
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 GAME_SYSTEM_PROMPT = """\
 You are the Game Teaching Agent. You generate a playable micro-game that \

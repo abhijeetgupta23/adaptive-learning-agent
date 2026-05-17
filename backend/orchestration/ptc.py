@@ -162,7 +162,9 @@ async def run_ptc(
         if usage is not None:
             in_total += getattr(usage, "input_tokens", 0) or 0
             out_total += getattr(usage, "output_tokens", 0) or 0
-        record_usage(model=model, agent=agent, response=response)
+        record_usage(
+            model=model, agent=agent, response=response, latency_ms=latency_ms,
+        )
 
         _logger.info(
             "ptc_iteration",

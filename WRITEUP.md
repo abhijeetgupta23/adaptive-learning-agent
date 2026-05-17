@@ -1,9 +1,10 @@
 # Adaptive Learning Agent — design notes
 
 A multi-agent system that takes a learning goal, plans a curriculum grounded in
-real sources, teaches each unit using a pedagogy chosen for the concept (worked
-example, analogy, generated micro-game), and assesses understanding by
-*conversation* — not multiple choice. Built as a personal proof-of-work piece;
+real sources, and teaches each unit primarily through an on-the-fly generated
+micro-game (with a worked-example fallback for un-gameable concepts). Assesses
+understanding by *conversation* — not multiple choice. Built as a personal
+proof-of-work piece;
 the architecture mirrors patterns I ship at VesterAI but in a different domain
 so the code is fully shareable.
 
@@ -147,7 +148,7 @@ click-button verdict path is preserved as a fallback (run without an
 
 ## Eval harness, not an afterthought
 
-Seven evaluators, twenty-three golden cases across three domains (databases,
+Seven evaluators, twenty-one golden cases across three domains (databases,
 italian travel, ML basics). The four interesting ones:
 
 - `intent_fidelity` — does the intent agent extract goal fields the learner
@@ -221,7 +222,7 @@ In priority order, the items I'd ship next:
   branches with attempt cap
 - [`backend/skills/registry.py`](backend/skills/registry.py) — generic
   `Skill` primitive for progressive token disclosure
-- [`evals/`](evals/) — 7 evaluators, 23 golden cases, runnable via
+- [`evals/`](evals/) — 7 evaluators, 21 golden cases, runnable via
   `python -m evals.runner --all`
 - [`frontend/src/app/page.tsx`](frontend/src/app/page.tsx) — single-page
   React app; derived state, left-rail stepper, focus-mode main pane,

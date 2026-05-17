@@ -1,13 +1,13 @@
 {
   "id": "pedagogy_sql_01",
-  "description": "Relational concept — visual or game should win.",
+  "description": "Relational concept — visual / spatial intuition is built best by playing with sets.",
   "unit": {
     "id": "u1",
     "objective": "Distinguish INNER vs LEFT JOIN in terms of which rows survive",
     "prerequisites": [],
-    "recommended_pedagogy": "visual",
+    "recommended_pedagogy": "game",
     "grounding_sources": [{"url": "https://x.com/a", "title": "a"}]
   },
   "learner_state": {"user_id": "demo"},
-  "acceptable_methods": ["visual", "game"]
+  "acceptable_methods": ["game"]
 }

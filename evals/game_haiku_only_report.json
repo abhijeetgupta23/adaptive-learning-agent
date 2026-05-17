@@ -1,0 +1,58 @@
+{
+  "summary": {
+    "claude-haiku-4-5-20251001": {
+      "n_cases": 3,
+      "n_completed": 3,
+      "n_passed": 3,
+      "pass_rate": 1.0,
+      "latency_p50_s": 62.3,
+      "latency_p99_s": 196.17,
+      "cost_total_usd": 0.3235,
+      "cost_mean_usd": 0.1078
+    }
+  },
+  "records": [
+    {
+      "case_id": "pedagogy_sql_01",
+      "model": "claude-haiku-4-5-20251001",
+      "unit_objective": "Distinguish INNER vs LEFT JOIN in terms of which rows survive",
+      "success": true,
+      "passed": true,
+      "overall_score": 0.77,
+      "playable": true,
+      "latency_s": 62.3,
+      "cost_usd": 0.0819,
+      "iterations": 6,
+      "rationale": "The game successfully teaches INNER vs LEFT JOIN row survival through a functional drag-and-drop mechanic with clear visual feedback, achieving a passing score on all axes.",
+      "error": null
+    },
+    {
+      "case_id": "pedagogy_sql_02",
+      "model": "claude-haiku-4-5-20251001",
+      "unit_objective": "Write a multi-join query step-by-step to answer a specific business question",
+      "success": true,
+      "passed": true,
+      "overall_score": 0.767,
+      "playable": true,
+      "latency_s": 60.34,
+      "cost_usd": 0.0748,
+      "iterations": 6,
+      "rationale": "The game is solvable, meaningfully on-concept by making players sequence JOIN clauses step-by-step for a business question, and sufficiently more engaging than static text, clearing all three thresholds.",
+      "error": null
+    },
+    {
+      "case_id": "pedagogy_italian_01",
+      "model": "claude-haiku-4-5-20251001",
+      "unit_objective": "Memorize 50 essential Italian travel phrases (greetings, food, transit)",
+      "success": true,
+      "passed": true,
+      "overall_score": 0.833,
+      "playable": true,
+      "latency_s": 130.6,
+      "cost_usd": 0.1668,
+      "iterations": 6,
+      "rationale": "The game is fully solvable, directly teaches the 50 Italian travel phrases through active recall matching, and provides sufficient feedback and progression mechanics to be more engaging than passive reading.",
+      "error": null
+    }
+  ]
+}

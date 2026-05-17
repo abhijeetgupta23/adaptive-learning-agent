@@ -1,13 +1,13 @@
 {
   "id": "pedagogy_italian_01",
-  "description": "Vocabulary learning — retrieval practice is the canonical fit.",
+  "description": "Vocabulary learning — wrap retrieval drill in a matching/recall game.",
   "unit": {
     "id": "u1",
     "objective": "Memorize 50 essential Italian travel phrases (greetings, food, transit)",
     "prerequisites": [],
-    "recommended_pedagogy": "retrieval",
+    "recommended_pedagogy": "game",
     "grounding_sources": [{"url": "https://x.com/c", "title": "c"}]
   },
   "learner_state": {"user_id": "demo"},
-  "acceptable_methods": ["retrieval", "game"]
+  "acceptable_methods": ["game"]
 }

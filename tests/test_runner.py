@@ -157,16 +157,24 @@ async def test_run_assessment_flags_mismatch() -> None:
 def test_summarize_formats_report() -> None:
     report = {
         "pedagogy": [
-            {"case_id": "p1", "passed": True, "chosen": "visual"},
-            {"case_id": "p2", "passed": False, "chosen": "retrieval"},
+            {"case_id": "p1", "passed": True, "chosen": "game",
+             "latency_s": 0.05, "cost_usd": 0.0},
+            {"case_id": "p2", "passed": False, "chosen": "worked_example",
+             "latency_s": 0.04, "cost_usd": 0.0},
         ],
         "assessment": [
-            {"case_id": "a1", "passed": True, "predicted": "pass"},
+            {"case_id": "a1", "passed": True, "predicted": "pass",
+             "latency_s": 1.2, "cost_usd": 0.01},
         ],
     }
-    text = summarize(report)
+    text, aggregates = summarize(report)
     assert "pedagogy: 1/2 passed" in text
     assert "assessment: 1/1 passed" in text
     assert "TOTAL: 2/3" in text
     assert "[PASS] p1" in text
     assert "[FAIL] p2" in text
+    # New: cost + latency surfaced in aggregates
+    assert aggregates["per_evaluator"]["pedagogy"]["pass_rate"] == 0.5
+    assert aggregates["per_evaluator"]["assessment"]["cost_total_usd"] == 0.01
+    assert aggregates["total"]["n_cases"] == 3
+    assert aggregates["total"]["cost_total_usd"] == 0.01

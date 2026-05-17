@@ -11,13 +11,13 @@ from backend.agents._parsing import (
     parse_json_payload,
 )
 from backend.orchestration.cache import cached_system
-from backend.orchestration.cost import record_usage
+from backend.orchestration.cost import CallTimer, record_usage
 from backend.orchestration.ptc import AnthropicLike
 from backend.schemas.goal import LearningGoal
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 INTENT_SYSTEM_PROMPT = """\
 You are the Intent Agent for an adaptive learning platform. Your job is to interview \
@@ -92,13 +92,16 @@ async def intent_turn(
     max_tokens: int = 1024,
 ) -> IntentTurnResult:
     """Run one Intent Agent turn. Either asks a question or finalizes the goal."""
-    response = await client.messages.create(
-        model=model,
-        system=cached_system(INTENT_SYSTEM_PROMPT),
-        messages=conversation,
-        max_tokens=max_tokens,
+    with CallTimer() as _t:
+        response = await client.messages.create(
+            model=model,
+            system=cached_system(INTENT_SYSTEM_PROMPT),
+            messages=conversation,
+            max_tokens=max_tokens,
+        )
+    record_usage(
+        model=model, agent="intent", response=response, latency_ms=_t.elapsed_ms,
     )
-    record_usage(model=model, agent="intent", response=response)
     try:
         text = extract_text(response)
         payload = parse_json_payload(text)

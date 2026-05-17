@@ -20,8 +20,13 @@ from backend.agents.teaching.game_validators import (
 )
 from backend.schemas import GroundingSource, LearningUnit, TeachingMethod
 from evals.evaluators.game_quality import (
+    CONCEPT_COVERAGE_PASS_RATIO,
+    CONCEPT_LLM_OVERRIDE_SCORE,
     GameQualityEvalError,
+    _extract_concept_keywords,
+    _extract_visible_text,
     evaluate_game_quality,
+    verify_concept_keywords,
 )
 from tests._fakes import (
     GAME_HAPPY_HTML,
@@ -377,6 +382,190 @@ async def test_game_quality_evaluator_sends_objective_and_html():
     assert "Distinguish INNER vs LEFT joins" in user_content
     assert "Join Matchmaker" in user_content
     assert "Game HTML:" in user_content
+
+
+# ============================================================================
+# Concept-keyword verifier (deterministic second axis on `on_concept`)
+# ============================================================================
+
+def test_extract_concept_keywords_strips_stopwords_and_lowercases():
+    # Mirrors the golden case pedagogy_sql_01 objective.
+    kws = _extract_concept_keywords(
+        "Distinguish INNER vs LEFT JOIN in terms of which rows survive"
+    )
+    # "vs", "in", "of", "which" are stopwords; the rest survive in order.
+    assert kws == ["distinguish", "inner", "left", "join", "terms", "rows", "survive"]
+
+
+def test_extract_concept_keywords_dedupes_and_filters_short():
+    kws = _extract_concept_keywords("Join and join AND a JOIN")
+    assert kws == ["join"]
+
+
+def test_extract_visible_text_skips_style_and_script():
+    html = (
+        "<div>"
+        "<style>.cell{color:red;background:join-the-fake-css}</style>"
+        "<h1>Pick the JOIN</h1>"
+        "<button>INNER</button>"
+        "<script>const inner = 'left'; function f(){return 'join';}</script>"
+        "</div>"
+    )
+    text = _extract_visible_text(html).lower()
+    assert "pick the join" in text
+    assert "inner" in text
+    # The strings inside <style>/<script> must NOT leak into visible text.
+    assert "join-the-fake-css" not in text
+    assert "const inner" not in text
+    assert "function f" not in text
+
+
+def test_verify_concept_keywords_strong_coverage_on_matching_game():
+    # _unit objective is "Distinguish INNER vs LEFT joins" → keywords include
+    # 'inner' and 'left', which appear as button labels in _good_spec's HTML.
+    result = verify_concept_keywords(_good_spec(), _unit())
+    assert "inner" in result.matched_keywords
+    assert "left" in result.matched_keywords
+    assert result.coverage_ratio >= CONCEPT_COVERAGE_PASS_RATIO
+
+
+def test_verify_concept_keywords_zero_coverage_on_off_concept_game():
+    spec = GameSpec(
+        unit_id="u2",
+        title="Color Picker",
+        description="Pick the rainbow color",
+        concept="colors",
+        instructions="Click the red square then the blue square.",
+        html="<div><button>Red</button><button>Blue</button></div>",
+    )
+    result = verify_concept_keywords(spec, _unit())
+    assert result.coverage_ratio == 0.0
+    # _unit objective is "Distinguish INNER vs LEFT joins" (plural).
+    assert set(result.missing_keywords) == {"distinguish", "inner", "left", "joins"}
+
+
+def test_verify_concept_keywords_ignores_css_only_mentions():
+    # Game's visible UI says nothing about the concept; CSS contains the keywords.
+    spec = GameSpec(
+        unit_id="u2",
+        title="Mystery",
+        description="d",
+        concept="c",
+        instructions="Tap the square",
+        html=(
+            "<div>"
+            "<style>.inner-left-join{color:red}</style>"
+            "<button>Tap</button>"
+            "</div>"
+        ),
+    )
+    result = verify_concept_keywords(spec, _unit())
+    # No visible-text mentions of inner/left/joins → coverage should be 0.
+    assert "inner" in result.missing_keywords
+    assert "joins" in result.missing_keywords
+    assert result.coverage_ratio == 0.0
+
+
+def test_verify_concept_keywords_empty_objective_treated_as_covered():
+    """A degenerate (no-keyword) objective shouldn't block the gate."""
+    unit = LearningUnit(
+        id="u-edge",
+        objective="A the",  # all stopwords
+        recommended_pedagogy=TeachingMethod.GAME,
+        grounding_sources=[GroundingSource(url="https://x.com", title="t")],
+    )
+    spec = GameSpec(
+        unit_id="u-edge", title="t", description="d",
+        concept="c", instructions="i", html="<div><button>go</button></div>",
+    )
+    result = verify_concept_keywords(spec, unit)
+    assert result.keywords == []
+    assert result.coverage_ratio == 1.0
+
+
+# ============================================================================
+# Quorum: LLM judge × keyword verifier on `on_concept`
+# ============================================================================
+
+def _judge_payload_with_on_concept(
+    on_concept: float, *, passed: bool = True, overall: float = 0.85,
+) -> dict:
+    return {
+        "axis_scores": [
+            {"axis": "solvable", "score": 0.9, "rationale": "ok"},
+            {"axis": "on_concept", "score": on_concept, "rationale": "ok"},
+            {"axis": "engagement", "score": 0.8, "rationale": "ok"},
+        ],
+        "overall_score": overall,
+        "passed": passed,
+        "rationale": "n/a",
+    }
+
+
+def _off_concept_spec() -> GameSpec:
+    """Playable, safe, but visible text doesn't mention the unit's concept."""
+    return GameSpec(
+        unit_id="u2",
+        title="Color Picker",
+        description="Tap the color the screen names.",
+        concept="colors",
+        instructions="Tap the matching color button.",
+        html=(
+            "<div>"
+            "<button onclick='x()'>Red</button>"
+            "<button onclick='x()'>Blue</button>"
+            "</div>"
+        ),
+    )
+
+
+async def test_quorum_weak_llm_strong_keyword_passes():
+    # LLM on_concept low (< override threshold), keyword coverage high → PASS.
+    client = FakeAnthropic([
+        text_response(json.dumps(
+            _judge_payload_with_on_concept(0.55, passed=True, overall=0.72)
+        ))
+    ])
+    result = await evaluate_game_quality(_good_spec(), _unit(), judge=client)
+    assert result.passed is True
+    assert result.concept_coverage_ratio >= CONCEPT_COVERAGE_PASS_RATIO
+    assert {"inner", "left"} <= set(result.matched_keywords)
+
+
+async def test_quorum_strong_llm_weak_keyword_passes():
+    # LLM on_concept high (>= override threshold) overrides weak keyword match.
+    client = FakeAnthropic([
+        text_response(json.dumps(
+            _judge_payload_with_on_concept(0.9, passed=True, overall=0.85)
+        ))
+    ])
+    result = await evaluate_game_quality(
+        _off_concept_spec(), _unit(), judge=client,
+    )
+    assert result.passed is True
+    assert result.concept_coverage_ratio < CONCEPT_COVERAGE_PASS_RATIO
+
+
+async def test_quorum_weak_llm_weak_keyword_fails():
+    # Both signals weak → fail the on_concept quorum even though LLM passed=True.
+    client = FakeAnthropic([
+        text_response(json.dumps(
+            _judge_payload_with_on_concept(0.55, passed=True, overall=0.7)
+        ))
+    ])
+    result = await evaluate_game_quality(
+        _off_concept_spec(), _unit(), judge=client,
+    )
+    assert result.passed is False
+    assert "on_concept quorum failed" in result.rationale
+    # Sanity: the verifier still ran and reported the gap.
+    assert "joins" in result.missing_keywords
+
+
+def test_concept_quorum_thresholds_documented_as_constants():
+    # These constants are referenced in the rationale string; lock the contract.
+    assert 0.0 < CONCEPT_COVERAGE_PASS_RATIO < 1.0
+    assert 0.0 < CONCEPT_LLM_OVERRIDE_SCORE <= 1.0
 
 
 # ============================================================================

@@ -5,13 +5,13 @@ import logging
 
 from backend.agents._parsing import StructuredOutputError, extract_text
 from backend.orchestration.cache import cached_system
-from backend.orchestration.cost import record_usage
+from backend.orchestration.cost import CallTimer, record_usage
 from backend.orchestration.ptc import AnthropicLike
 from backend.schemas.curriculum import LearningUnit
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 WORKED_EXAMPLE_SYSTEM_PROMPT = """\
 You are the Worked Example Teaching Agent. Produce a concrete, runnable walkthrough \
@@ -55,13 +55,19 @@ async def generate_worked_example(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 4096,
 ) -> str:
-    response = await client.messages.create(
+    with CallTimer() as _t:
+        response = await client.messages.create(
+            model=model,
+            system=cached_system(WORKED_EXAMPLE_SYSTEM_PROMPT),
+            messages=[{"role": "user", "content": _build_user_message(unit)}],
+            max_tokens=max_tokens,
+        )
+    record_usage(
         model=model,
-        system=cached_system(WORKED_EXAMPLE_SYSTEM_PROMPT),
-        messages=[{"role": "user", "content": _build_user_message(unit)}],
-        max_tokens=max_tokens,
+        agent="worked_example",
+        response=response,
+        latency_ms=_t.elapsed_ms,
     )
-    record_usage(model=model, agent="worked_example", response=response)
     try:
         text = extract_text(response)
     except StructuredOutputError as exc:

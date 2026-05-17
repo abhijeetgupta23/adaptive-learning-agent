@@ -4,14 +4,10 @@ export type KnowledgeLevel = "novice" | "beginner" | "intermediate" | "advanced"
 export type DesiredDepth = "cocktail" | "working" | "expert";
 export type Modality = "visual" | "verbal" | "interactive";
 
-export type TeachingMethod =
-  | "worked_example"
-  | "analogy"
-  | "visual"
-  | "game"
-  | "socratic"
-  | "feynman"
-  | "retrieval";
+// Vision B: only `game` (flagship) and `worked_example` (fallback) are routable.
+// Legacy enum values remain on the backend for compat with persisted
+// `LearnerState` rows, but the frontend never receives them in a fresh session.
+export type TeachingMethod = "game" | "worked_example";
 
 export type Verdict = "pass" | "needs_reinforcement" | "needs_different_approach";
 
@@ -84,6 +80,11 @@ export type SSEEvent =
     }
   | { event: "assessment_result"; result: AssessmentResult }
   | ({ event: "cost_update" } & CostUpdate)
+  | {
+      event: "circuit_breaker_tripped";
+      reason: string;
+      fallback_method: TeachingMethod;
+    }
   | { event: "complete" }
   | { event: "error"; message: string };
 

@@ -1,15 +1,10 @@
-"""Teaching-skill registry: maps each TeachingMethod to a Skill record.
+"""Teaching-skill registry.
 
-Real generators are registered for the methods we actually implement (game,
-worked_example). The rest are registered as **stubs** — frontmatter-only — so
-they participate in router catalog text but fall back to demo placeholders at
-teach time.
-
-Why register stubs at all? Two reasons:
-1. The pedagogy router still needs to *consider* them (curriculum may pick one).
-2. The `catalog_text()` exposes them to the curriculum prompt so it can pick a
-   pedagogy when planning. With stubs absent the curriculum agent would never
-   suggest e.g. "feynman".
+Vision B (game-first): only Game and Worked Example are registered. Game is
+the flagship; Worked Example is the silent fallback for concepts the game
+agent cannot produce a passing artifact for. Other `TeachingMethod` enum
+values exist for back-compat with serialized state and golden cases, but
+are deliberately not routable.
 """
 from __future__ import annotations
 
@@ -62,51 +57,6 @@ def build_teaching_registry(
         ),
         system_prompt=WORKED_EXAMPLE_SYSTEM_PROMPT,
         generate=_gen_worked_example,
-    ))
-
-    # ---- stub skills (frontmatter only, no generator yet) ----
-    # These let the pedagogy router catalog them and let curriculum pick them;
-    # the dispatcher falls back to a demo placeholder when invoked.
-
-    reg.register(Skill(
-        name=TeachingMethod.VISUAL.value,
-        description="Diagram or visualization of structure (Venn, tree, topology)",
-        applicable_when=(
-            "Topological / relational / spatial concepts best *seen* rather "
-            "than *driven*: tree shapes, set relationships, layouts."
-        ),
-    ))
-    reg.register(Skill(
-        name=TeachingMethod.ANALOGY.value,
-        description="Map a novel mechanism to a familiar one",
-        applicable_when=(
-            "Novel abstractions where the learner already understands a "
-            "structurally-similar familiar system."
-        ),
-    ))
-    reg.register(Skill(
-        name=TeachingMethod.SOCRATIC.value,
-        description="Guide via questions; learner constructs the understanding",
-        applicable_when=(
-            "Fuzzy conceptual understanding the learner must build themselves; "
-            "ideas where direct telling sticks worse than self-derivation."
-        ),
-    ))
-    reg.register(Skill(
-        name=TeachingMethod.FEYNMAN.value,
-        description="Have the learner teach it back; expose gaps",
-        applicable_when=(
-            "Capstone or self-test: the learner should be able to explain it "
-            "in their own words to verify deep understanding."
-        ),
-    ))
-    reg.register(Skill(
-        name=TeachingMethod.RETRIEVAL.value,
-        description="Spaced-recall drill of vocabulary or facts",
-        applicable_when=(
-            "Vocabulary, named entities, dates, formulas — content that just "
-            "needs to be remembered, not derived."
-        ),
     ))
 
     return reg

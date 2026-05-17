@@ -18,7 +18,7 @@ from backend.skills import SkillRegistry
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 _CURRICULUM_SYSTEM_PROMPT_TEMPLATE = """\
 You are the Curriculum Agent for an adaptive learning platform.

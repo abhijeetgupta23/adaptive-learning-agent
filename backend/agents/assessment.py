@@ -11,7 +11,7 @@ from backend.agents._parsing import (
     parse_json_payload,
 )
 from backend.orchestration.cache import cached_system
-from backend.orchestration.cost import record_usage
+from backend.orchestration.cost import CallTimer, record_usage
 from backend.orchestration.ptc import AnthropicLike
 from backend.schemas.assessment import AssessmentResult
 from backend.schemas.curriculum import LearningUnit
@@ -19,7 +19,7 @@ from backend.schemas.teaching import TeachingMethod
 
 _logger = logging.getLogger(__name__)
 
-DEFAULT_MODEL = "claude-sonnet-4-6"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
 ASSESSMENT_SYSTEM_PROMPT = """\
 You are the Assessment Agent. Judge whether the learner demonstrated understanding \
@@ -110,13 +110,16 @@ async def generate_assessment_question(
         "Teaching content the learner just saw (truncated):\n"
         f"{teaching_content[:2000]}"
     )
-    response = await client.messages.create(
-        model=model,
-        system=cached_system(ASSESSMENT_QUESTION_SYSTEM_PROMPT),
-        messages=[{"role": "user", "content": user_msg}],
-        max_tokens=max_tokens,
+    with CallTimer() as _t:
+        response = await client.messages.create(
+            model=model,
+            system=cached_system(ASSESSMENT_QUESTION_SYSTEM_PROMPT),
+            messages=[{"role": "user", "content": user_msg}],
+            max_tokens=max_tokens,
+        )
+    record_usage(
+        model=model, agent="assessment", response=response, latency_ms=_t.elapsed_ms,
     )
-    record_usage(model=model, agent="assessment", response=response)
     try:
         text = extract_text(response).strip()
     except StructuredOutputError as exc:
@@ -144,16 +147,19 @@ async def assess_understanding(
     model: str = DEFAULT_MODEL,
     max_tokens: int = 1024,
 ) -> AssessmentResult:
-    response = await client.messages.create(
-        model=model,
-        system=cached_system(ASSESSMENT_SYSTEM_PROMPT),
-        messages=[{
-            "role": "user",
-            "content": _build_user_message(unit, method, transcript),
-        }],
-        max_tokens=max_tokens,
+    with CallTimer() as _t:
+        response = await client.messages.create(
+            model=model,
+            system=cached_system(ASSESSMENT_SYSTEM_PROMPT),
+            messages=[{
+                "role": "user",
+                "content": _build_user_message(unit, method, transcript),
+            }],
+            max_tokens=max_tokens,
+        )
+    record_usage(
+        model=model, agent="assessment", response=response, latency_ms=_t.elapsed_ms,
     )
-    record_usage(model=model, agent="assessment", response=response)
     try:
         text = extract_text(response)
         payload: dict[str, Any] = parse_json_payload(text)

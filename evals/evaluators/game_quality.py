@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from html.parser import HTMLParser
 from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
@@ -12,6 +13,12 @@ from backend.orchestration.ptc import AnthropicLike
 from backend.schemas.curriculum import LearningUnit
 
 DEFAULT_JUDGE_MODEL = "claude-sonnet-4-6"
+
+# Quorum thresholds for the on_concept claim (two-axis verification).
+# A high-confidence LLM judgment can override a weak keyword match; a weak
+# LLM judgment requires the keyword check to back it up.
+CONCEPT_COVERAGE_PASS_RATIO = 0.5
+CONCEPT_LLM_OVERRIDE_SCORE = 0.8
 
 # Interactive HTML elements / JS event handlers we expect in a playable game.
 _INTERACTIVE_PATTERNS = [
@@ -29,6 +36,17 @@ _FORBIDDEN_PATTERNS = [
     r"\bfetch\s*\(",                  # network call
     r"XMLHttpRequest",                # network call
 ]
+
+# Tiny static stopword set — keep it cheap, no NLTK/spaCy dep.
+_STOPWORDS = frozenset({
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
+    "has", "have", "in", "into", "is", "it", "its", "of", "on", "or",
+    "that", "the", "their", "them", "this", "to", "vs", "via", "was",
+    "were", "which", "with", "you", "your", "between", "about", "how",
+    "what", "when", "where", "why",
+})
+
+_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]*")
 
 
 GAME_QUALITY_JUDGE_PROMPT = """\
@@ -72,6 +90,18 @@ class GameAxisScore(BaseModel):
     rationale: str
 
 
+class ConceptKeywordResult(BaseModel):
+    """Deterministic second-axis verifier for the `on_concept` claim.
+
+    Pairs with the LLM judge in a quorum: a high-confidence LLM judgment can
+    override a weak keyword match, and vice versa.
+    """
+    keywords: list[str]
+    matched_keywords: list[str]
+    missing_keywords: list[str]
+    coverage_ratio: float = Field(ge=0.0, le=1.0)
+
+
 class GameQualityResult(BaseModel):
     playable: bool
     has_forbidden_resource: bool
@@ -79,6 +109,10 @@ class GameQualityResult(BaseModel):
     overall_score: float = Field(ge=0.0, le=1.0)
     passed: bool
     rationale: str
+    # Second-axis verifier on `on_concept`.
+    concept_coverage_ratio: float = Field(ge=0.0, le=1.0, default=0.0)
+    matched_keywords: list[str] = Field(default_factory=list)
+    missing_keywords: list[str] = Field(default_factory=list)
 
 
 class GameQualityEvalError(Exception):
@@ -93,6 +127,104 @@ def _has_forbidden_resource(html: str) -> bool:
     return any(re.search(p, html, re.IGNORECASE) for p in _FORBIDDEN_PATTERNS)
 
 
+def _extract_concept_keywords(objective: str) -> list[str]:
+    """Cheap noun-phrase-ish extraction: tokenize, lowercase, strip stopwords."""
+    tokens = _WORD_RE.findall(objective.lower())
+    seen: set[str] = set()
+    keywords: list[str] = []
+    for tok in tokens:
+        if tok in _STOPWORDS or len(tok) <= 1:
+            continue
+        if tok in seen:
+            continue
+        seen.add(tok)
+        keywords.append(tok)
+    return keywords
+
+
+class _VisibleTextExtractor(HTMLParser):
+    """Collect user-visible text only — skip <style>, <script>, and attributes."""
+
+    _SKIP_TAGS = frozenset({"style", "script"})
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._chunks: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in self._SKIP_TAGS:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self._SKIP_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self._chunks.append(data)
+
+    @property
+    def text(self) -> str:
+        return " ".join(self._chunks)
+
+
+def _extract_visible_text(html: str) -> str:
+    parser = _VisibleTextExtractor()
+    try:
+        parser.feed(html)
+        parser.close()
+    except Exception:
+        # html.parser is forgiving but bail safe on truly broken input.
+        return parser.text
+    return parser.text
+
+
+def verify_concept_keywords(
+    game: GameSpec, unit: LearningUnit,
+) -> ConceptKeywordResult:
+    """Deterministic second-axis verifier for the `on_concept` claim.
+
+    Extracts noun-phrase-ish keywords from the unit objective (and the game's
+    own `concept` field as a hint source), then checks how many appear in the
+    rendered game's user-visible text (button labels, instructions, headings —
+    NOT in CSS or script bodies).
+    """
+    keywords = _extract_concept_keywords(unit.objective)
+    if not keywords:
+        # Degenerate objective — treat as fully covered to avoid blocking.
+        return ConceptKeywordResult(
+            keywords=[], matched_keywords=[], missing_keywords=[],
+            coverage_ratio=1.0,
+        )
+
+    # User-visible text includes game.instructions + game.title + visible HTML.
+    visible_html_text = _extract_visible_text(game.html)
+    haystack = f"{game.title} {game.instructions} {visible_html_text}".lower()
+
+    matched: list[str] = []
+    missing: list[str] = []
+    for kw in keywords:
+        # Cheap morphological match: strip a trailing 's' from the keyword so
+        # "joins" matches "JOIN" too, then allow any \w* suffix so "join"
+        # also matches "joining". Word-boundary keeps us from matching inside
+        # unrelated tokens.
+        stem = kw[:-1] if len(kw) > 3 and kw.endswith("s") else kw
+        pattern = rf"\b{re.escape(stem)}\w*"
+        if re.search(pattern, haystack):
+            matched.append(kw)
+        else:
+            missing.append(kw)
+
+    coverage = len(matched) / len(keywords)
+    return ConceptKeywordResult(
+        keywords=keywords,
+        matched_keywords=matched,
+        missing_keywords=missing,
+        coverage_ratio=coverage,
+    )
+
+
 def _build_judge_user_message(game: GameSpec, unit: LearningUnit) -> str:
     return (
         f"Unit objective: {unit.objective}\n\n"
@@ -102,6 +234,13 @@ def _build_judge_user_message(game: GameSpec, unit: LearningUnit) -> str:
         f"Player instructions: {game.instructions}\n\n"
         f"Game HTML:\n{game.html}"
     )
+
+
+def _on_concept_score(axes: list[GameAxisScore]) -> float:
+    for a in axes:
+        if a.axis == "on_concept":
+            return a.score
+    return 0.0
 
 
 async def evaluate_game_quality(
@@ -114,6 +253,9 @@ async def evaluate_game_quality(
 ) -> GameQualityResult:
     playable = _has_interactive_elements(game.html)
     forbidden = _has_forbidden_resource(game.html)
+
+    # Deterministic second-axis verifier (no LLM call, runs unconditionally).
+    keyword_result = verify_concept_keywords(game, unit)
 
     response = await judge.messages.create(
         model=model,
@@ -140,12 +282,29 @@ async def evaluate_game_quality(
         raise GameQualityEvalError(f"Judge output missing required fields: {payload}")
 
     # Hard gates: must be playable and must not fetch remote resources.
-    gated_pass = bool(llm_passed) and playable and not forbidden
+    llm_gated_pass = bool(llm_passed) and playable and not forbidden
+
+    # Two-axis quorum on `on_concept`: keyword coverage backs up (or overrides
+    # via high LLM confidence) the LLM judge's on_concept verdict.
+    on_concept_llm = _on_concept_score(axes)
+    concept_quorum = (
+        keyword_result.coverage_ratio >= CONCEPT_COVERAGE_PASS_RATIO
+        or on_concept_llm >= CONCEPT_LLM_OVERRIDE_SCORE
+    )
+    gated_pass = llm_gated_pass and concept_quorum
+
     gate_note_parts = []
     if not playable:
         gate_note_parts.append("no interactive elements detected")
     if forbidden:
         gate_note_parts.append("contains forbidden external resource or network call")
+    if not concept_quorum:
+        gate_note_parts.append(
+            f"on_concept quorum failed: keyword coverage "
+            f"{keyword_result.coverage_ratio:.2f} < {CONCEPT_COVERAGE_PASS_RATIO} "
+            f"AND llm on_concept {on_concept_llm:.2f} < {CONCEPT_LLM_OVERRIDE_SCORE}; "
+            f"missing keywords={keyword_result.missing_keywords}"
+        )
     gate_note = "; ".join(gate_note_parts)
     rationale = llm_rationale if not gate_note else f"{llm_rationale} | Gates: {gate_note}"
 
@@ -156,4 +315,7 @@ async def evaluate_game_quality(
         overall_score=float(llm_overall),
         passed=gated_pass,
         rationale=rationale,
+        concept_coverage_ratio=keyword_result.coverage_ratio,
+        matched_keywords=keyword_result.matched_keywords,
+        missing_keywords=keyword_result.missing_keywords,
     )

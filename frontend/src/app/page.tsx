@@ -1003,7 +1003,7 @@ function UnitTeachingView({
       </div>
     );
   }
-  const method = unit.teachingMethod ?? "retrieval";
+  const method = unit.teachingMethod ?? "worked_example";
   return (
     <section
       className={`rounded-xl border border-slate-800 bg-slate-900/40 ${
@@ -1266,15 +1266,12 @@ function renderInline(s: string): React.ReactNode {
 // PedagogyBadge
 // ============================================================================
 
+// Vision B: only game + worked_example are user-facing methods.
 const PEDAGOGY_TONE: Record<string, string> = {
   game: "bg-purple-500/15 text-purple-300 border-purple-500/30",
-  visual: "bg-sky-500/15 text-sky-300 border-sky-500/30",
   worked_example: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-  analogy: "bg-amber-500/15 text-amber-300 border-amber-500/30",
-  socratic: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-  feynman: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30",
-  retrieval: "bg-slate-500/15 text-slate-300 border-slate-500/30",
 };
+const DEFAULT_TONE = "bg-slate-500/15 text-slate-300 border-slate-500/30";
 
 function PedagogyBadge({
   method,
@@ -1283,7 +1280,7 @@ function PedagogyBadge({
   method: string;
   small?: boolean;
 }) {
-  const tone = PEDAGOGY_TONE[method] ?? PEDAGOGY_TONE.retrieval;
+  const tone = PEDAGOGY_TONE[method] ?? DEFAULT_TONE;
   return (
     <span
       className={`inline-flex items-center rounded-md border px-2 py-0.5 ${

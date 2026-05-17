@@ -32,10 +32,10 @@ Out of scope for v1: mid-unit prerequisite detours, cross-unit retrieval, re-int
 | Agent              | Input                            | Output                      | Model     | Role                                           |
 | ------------------ | -------------------------------- | --------------------------- | --------- | ---------------------------------------------- |
 | Intent             | free-form conversation           | `LearningGoal` or ask       | Sonnet    | structured goal extraction                     |
-| Curriculum         | `LearningGoal`                   | `Curriculum` (grounded)     | Opus      | research + plan, every unit cites a source     |
-| Pedagogy Router    | `LearningUnit` + `LearnerState`  | `TeachingPlan`              | rules → Opus fallback | pick method for this unit            |
+| Curriculum         | `LearningGoal`                   | `Curriculum` (grounded)     | Sonnet    | research + plan, every unit cites a source     |
+| Pedagogy Router    | `LearningUnit` + `LearnerState`  | `TeachingPlan`              | rules → Sonnet | default Game; Worked Example fallback     |
 | Game (flagship)    | `LearningUnit`                   | `GameSpec` (HTML+JS)        | Sonnet    | concept-as-interaction micro-game              |
-| Analogy/Visual/etc.| `LearningUnit`                   | streamed explanation        | Sonnet    | *stubs in v1*                                  |
+| Worked Example     | `LearningUnit`                   | streamed markdown           | Sonnet    | silent fallback for un-gameable concepts       |
 | Assessment         | transcript of teaching           | `AssessmentResult`          | Sonnet    | pass / retry-same / retry-different            |
 | Memory             | `(state, unit, method, result)`  | updated `LearnerState`      | pure fn   | three-tier persistence                         |
 
@@ -55,7 +55,7 @@ adaptive-learning-agent/
 │   ├── agents/              # Intent, Curriculum, PedagogyRouter, Teaching/Game, Assessment, Memory
 │   ├── schemas/             # Pydantic models + SSE event union
 │   ├── orchestration/       # PTC harness, ToolRegistry, AnthropicClient, SSE, logging
-│   ├── retrieval/           # Tavily wrapper + web_search Tool
+│   ├── retrieval/           # Anthropic web_search server-tool wrapper
 │   ├── persistence/         # SQLAlchemy async + LearnerState store
 │   ├── api/                 # FastAPI /api/session/run (SSE endpoint)
 │   └── main.py              # lifespan: engine, client, search tool

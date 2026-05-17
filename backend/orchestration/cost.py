@@ -10,6 +10,7 @@ cache_creation) from the response and converts to USD using PRICING below.
 """
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
@@ -48,13 +49,23 @@ class CallEntry:
     cache_read_tokens: int
     cache_write_tokens: int
     usd: float
+    # Wall-clock latency for the LLM call (ms). 0.0 when caller didn't
+    # supply one — older code paths pre-dating the /ops dashboard.
+    latency_ms: float = 0.0
 
 
 @dataclass
 class CostAccumulator:
     entries: list[CallEntry] = field(default_factory=list)
 
-    def record(self, *, model: str, agent: str, usage: Any) -> CallEntry:
+    def record(
+        self,
+        *,
+        model: str,
+        agent: str,
+        usage: Any,
+        latency_ms: float = 0.0,
+    ) -> CallEntry:
         in_tok = int(getattr(usage, "input_tokens", 0) or 0)
         out_tok = int(getattr(usage, "output_tokens", 0) or 0)
         cache_read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
@@ -79,9 +90,21 @@ class CostAccumulator:
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
             usd=usd,
+            latency_ms=float(latency_ms),
         )
         self.entries.append(entry)
         return entry
+
+    def latency_by_agent_ms(self) -> dict[str, list[float]]:
+        """Per-agent list of call latencies. Consumers compute percentiles."""
+        out: dict[str, list[float]] = {}
+        for e in self.entries:
+            out.setdefault(e.agent, []).append(e.latency_ms)
+        return out
+
+    @property
+    def total_latency_s(self) -> float:
+        return sum(e.latency_ms for e in self.entries) / 1000.0
 
     @property
     def total_usd(self) -> float:
@@ -123,7 +146,35 @@ def session_accumulator():
         _acc_var.reset(token)
 
 
-def record_usage(*, model: str, agent: str, response: Any) -> CallEntry | None:
+class CallTimer:
+    """Tiny stopwatch used as a context manager around `client.messages.create`.
+
+    Usage:
+        with CallTimer() as t:
+            response = await client.messages.create(...)
+        record_usage(..., response=response, latency_ms=t.elapsed_ms)
+    """
+    __slots__ = ("_start", "elapsed_ms")
+
+    def __init__(self) -> None:
+        self._start = 0.0
+        self.elapsed_ms = 0.0
+
+    def __enter__(self) -> CallTimer:
+        self._start = time.monotonic()
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        self.elapsed_ms = (time.monotonic() - self._start) * 1000.0
+
+
+def record_usage(
+    *,
+    model: str,
+    agent: str,
+    response: Any,
+    latency_ms: float = 0.0,
+) -> CallEntry | None:
     """Record one LLM call into the active accumulator. No-op outside a session."""
     acc = current_accumulator()
     if acc is None:
@@ -131,4 +182,4 @@ def record_usage(*, model: str, agent: str, response: Any) -> CallEntry | None:
     usage = getattr(response, "usage", None)
     if usage is None:
         return None
-    return acc.record(model=model, agent=agent, usage=usage)
+    return acc.record(model=model, agent=agent, usage=usage, latency_ms=latency_ms)

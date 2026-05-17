@@ -11,7 +11,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from backend.agents.teaching.registry import build_teaching_registry  # noqa: E402
-from backend.api import session_router  # noqa: E402
+from backend.api import ops_router, session_router  # noqa: E402
 from backend.orchestration.anthropic_client import get_anthropic_client  # noqa: E402
 from backend.orchestration.logging import configure_logging  # noqa: E402
 from backend.orchestration.middleware import MiddlewareClient  # noqa: E402
@@ -90,6 +90,9 @@ app.add_middleware(
 )
 
 app.include_router(session_router)
+# Self-hosted ops dashboard (cost + latency + recent runs). Local-first;
+# see ops.py for the # TODO: protect /ops in deploy note.
+app.include_router(ops_router)
 
 
 @app.get("/health")

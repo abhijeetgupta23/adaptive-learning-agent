@@ -3,6 +3,7 @@ from backend.schemas.curriculum import Curriculum, GroundingSource, LearningUnit
 from backend.schemas.events import (
     AssessmentQuestionEvent,
     AssessmentResultEvent,
+    CircuitBreakerTrippedEvent,
     CompleteEvent,
     CostUpdateEvent,
     CurriculumReadyEvent,
@@ -23,6 +24,7 @@ __all__ = [
     "AssessmentQuestionEvent",
     "AssessmentResult",
     "AssessmentResultEvent",
+    "CircuitBreakerTrippedEvent",
     "CompleteEvent",
     "CostUpdateEvent",
     "Curriculum",

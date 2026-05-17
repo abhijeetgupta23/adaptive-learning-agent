@@ -31,3 +31,11 @@ logs/
 .claude/
 .playwright-mcp/
 *.stackdump
+
+# Playwright debug screenshots (regenerated on demand)
+vision-b-*.png
+demo-*.png
+
+# Future Graph RAG: Kuzu embedded DB files (will be populated by bootstrap script)
+data/concept_graph/*.kuzu
+data/concept_graph/*.kuzu_wal

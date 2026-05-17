@@ -1,0 +1,13 @@
+# Foundations of Game-Based Learning
+
+Citation: Plass, J. L., Homer, B. D., & Kinzer, C. K. (2015). *Foundations of Game-Based Learning.* Educational Psychologist, 50(4), 258–283.
+
+Plass, Homer, and Kinzer synthesize a generation of GBL research into four perspectives that any serious-game design must engage simultaneously: **cognitive**, **motivational**, **affective**, and **sociocultural**. The paper's contribution is to refuse the choice — a game that is fun but cognitively empty fails as instruction; a game that is rigorous but joyless fails as motivation.
+
+The **cognitive** perspective ties mechanics to specific learning operations: classification mechanics build category schemas, simulation mechanics build mental models of causal systems, prediction mechanics build conditional reasoning. Mechanic choice is the principal cognitive lever — the same content taught via drag-drop matching vs. button-array selection vs. canvas simulation produces measurably different mental representations. The **motivational** perspective frames games as the rare instructional medium where the learner is the agent: chosen difficulty, visible progress, and contingent reward turn extrinsic content into intrinsically chased goals. The **affective** perspective takes seriously that emotion is part of cognition — surprise, frustration, and satisfaction all encode information into memory, and a game that flattens affect loses retention. The **sociocultural** perspective notes that meaning is co-constructed; even single-player games carry assumed identities, peer comparisons, and norms.
+
+The framework's central design principle is **mechanic–principle alignment**: each game mechanic should be deliberately chosen as the operational form of a cognitive or motivational principle, not picked for novelty. Drag-drop is appropriate when the learning is *relational* (which item belongs in which bucket). Spatial arrangement is appropriate when the structure being taught *is* spatial (set diagrams, sequence). Role-play and simulation are appropriate when the learner needs to inhabit a perspective (system dynamics, causal chains).
+
+For an LLM-driven game generator, Plass et al. give a concrete decision rule: **pick the mechanic that operationalizes the cognitive principle that the concept demands**, not the mechanic that produces the prettiest screenshot. The four-perspective frame is also a built-in critique: any generated game can be audited by asking whether it engages all four — and if it engages none of motivation, affect, or sociocultural framing, it is a quiz, not a game.
+
+Source: https://www.tandfonline.com/doi/full/10.1080/00461520.2015.1122533

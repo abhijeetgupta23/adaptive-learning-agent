@@ -20,13 +20,26 @@ from backend.agents.curriculum import build_curriculum
 from backend.agents.intent import IntentCompleteResponse, intent_turn
 from backend.agents.memory import apply_assessment
 from backend.agents.pedagogy_router import route_pedagogy
-from backend.orchestration.cost import CostAccumulator, session_accumulator
+from backend.agents.teaching.game import GameAgentError
+from backend.api.ops import register_live_session, unregister_live_session
+from backend.orchestration.circuit_breaker import SessionCircuitBreaker
+from backend.orchestration.cost import (
+    CostAccumulator,
+    current_accumulator,
+    session_accumulator,
+)
 from backend.orchestration.logging import new_request_id
 from backend.persistence.learner_state import load_learner_state, save_learner_state
+from backend.persistence.models import SessionRunRow
+from backend.persistence.session_runs import (
+    finish_session_run,
+    start_session_run,
+)
 from backend.schemas.assessment import AssessmentResult, Verdict
 from backend.schemas.events import (
     AssessmentQuestionEvent,
     AssessmentResultEvent,
+    CircuitBreakerTrippedEvent,
     CompleteEvent,
     CostUpdateEvent,
     CurriculumReadyEvent,
@@ -40,6 +53,7 @@ from backend.schemas.events import (
 )
 from backend.schemas.goal import LearningGoal
 from backend.schemas.state import LearnerState
+from backend.schemas.teaching import MethodCall, TeachingMethod, TeachingPlan
 from backend.skills import SkillRegistry, StubSkillError
 
 _logger = logging.getLogger(__name__)
@@ -147,14 +161,30 @@ async def _teach_one_attempt(
     method,
     *,
     teaching_registry: SkillRegistry,
-) -> str:
+) -> tuple[str, bool]:
+    """Run one teaching attempt.
+
+    Returns `(content, game_quality_failure)`. The second element is True only
+    when the Game agent raised `GameAgentError` (PTC loop couldn't produce a
+    valid artifact); False otherwise. Callers feed this into the per-session
+    circuit breaker.
+    """
     skill = teaching_registry.get(method.value)
     try:
         if skill is None or skill.is_stub():
-            return f"[Demo {method.value} teaching for: {unit.objective}]"
-        return await skill.run(unit)
+            return f"[Demo {method.value} teaching for: {unit.objective}]", False
+        return await skill.run(unit), False
     except StubSkillError:
-        return f"[Demo {method.value} teaching for: {unit.objective}]"
+        return f"[Demo {method.value} teaching for: {unit.objective}]", False
+    except GameAgentError as exc:
+        _logger.warning(
+            "game_agent_quality_failure",
+            extra={"unit_id": unit.id, "error": str(exc)},
+        )
+        return (
+            f"[Game agent could not produce a valid artifact for: {unit.objective}]",
+            True,
+        )
 
 
 async def _await_verdict(
@@ -210,6 +240,13 @@ async def _interactive_assessment(
     yield result
 
 
+def _game_spend_usd(acc: CostAccumulator | None) -> float:
+    """Return cumulative USD spent under agent='game' in the active session."""
+    if acc is None:
+        return 0.0
+    return acc.by_agent().get("game", 0.0)
+
+
 async def run_session_stream(
     *,
     user_id: str,
@@ -224,6 +261,7 @@ async def run_session_stream(
     goal: LearningGoal | None = None,
     initial_message: str | None = None,
     additional_tools: list | None = None,
+    circuit_breaker: SessionCircuitBreaker | None = None,
 ) -> AsyncIterator[SSEEvent]:
     """Orchestrate a full session: optional HITL intent → curriculum → teach → assess.
 
@@ -271,6 +309,9 @@ async def run_session_stream(
             or LearnerState(user_id=user_id)
         )
 
+    breaker = circuit_breaker or SessionCircuitBreaker()
+    breaker_announced = False
+
     for unit in curriculum.units:
         excluded_methods = []  # methods the learner has explicitly rejected
         last_verdict = None
@@ -282,11 +323,39 @@ async def run_session_stream(
                 llm_client=client if excluded_methods else None,
             )
             method = plan.methods[0].method
+
+            # Circuit-breaker override: if tripped, force worked_example for
+            # any unit the router still wants to teach with `game`.
+            tripped, reason = breaker.should_trip()
+            if tripped and method is TeachingMethod.GAME:
+                if not breaker_announced:
+                    yield CircuitBreakerTrippedEvent(reason=reason or "tripped")
+                    breaker_announced = True
+                method = TeachingMethod.WORKED_EXAMPLE
+                plan = TeachingPlan(
+                    unit_id=unit.id,
+                    methods=[MethodCall(method=method)],
+                    rationale=(
+                        f"Circuit-broken on Game agent ({reason}); "
+                        "falling back to worked_example."
+                    ),
+                )
+
             yield UnitStartedEvent(unit_id=unit.id, plan=plan)
 
-            content = await _teach_one_attempt(
+            # Snapshot game spend BEFORE the attempt so we can attribute the
+            # delta back to this single attempt (cost accumulator is per-session).
+            spend_before = _game_spend_usd(current_accumulator())
+            content, game_failed = await _teach_one_attempt(
                 unit, method, teaching_registry=teaching_registry,
             )
+            if method is TeachingMethod.GAME:
+                spend_delta = max(
+                    0.0, _game_spend_usd(current_accumulator()) - spend_before,
+                )
+                breaker.record_game_attempt(
+                    passed=not game_failed, cost_usd=spend_delta,
+                )
             yield TeachingChunkEvent(
                 unit_id=unit.id, method=method, content=content,
             )
@@ -370,14 +439,41 @@ async def run_session(request: Request, body: RunSessionRequest) -> EventSourceR
     _pending_sessions[session_id] = pending
 
     async def event_generator():
+        # Pre-seed domain/sub_goal if the caller skipped HITL; otherwise we
+        # back-fill these from the IntentUpdate event mid-stream.
+        run_domain = body.goal.domain if body.goal else None
+        run_sub_goal = body.goal.sub_goal if body.goal else None
+        run_id: int | None = None
+        unit_count = 0
+        units_passed = 0
         try:
+            await register_live_session(session_id, user_id=body.user_id)
+            async with session_factory() as db:
+                run_id = await start_session_run(
+                    session=db,
+                    session_id=session_id,
+                    user_id=body.user_id,
+                    domain=run_domain,
+                    sub_goal=run_sub_goal,
+                )
+
             if client is None:
                 err = ErrorEvent(
                     message="Server missing env var: ANTHROPIC_API_KEY",
                 )
                 yield {"data": err.model_dump_json()}
+                # Record this as an errored run so the dashboard sees it.
+                async with session_factory() as db:
+                    await finish_session_run(
+                        session=db, run_id=run_id,
+                        unit_count=0, units_passed=0,
+                        total_cost_usd=0.0, total_latency_s=0.0,
+                        cost_by_agent={}, latency_by_agent={},
+                        error="ConfigError: ANTHROPIC_API_KEY missing",
+                    )
                 return
             with session_accumulator() as acc:
+                error_message: str | None = None
                 try:
                     async for event in run_session_stream(
                         user_id=body.user_id,
@@ -392,15 +488,28 @@ async def run_session(request: Request, body: RunSessionRequest) -> EventSourceR
                         goal=body.goal,
                         initial_message=body.initial_message,
                         additional_tools=[wikipedia_tool] if wikipedia_tool else None,
+                        circuit_breaker=SessionCircuitBreaker(),
                     ):
+                        # Back-fill goal fields once intent loop resolves them.
+                        if (
+                            isinstance(event, IntentUpdateEvent)
+                            and event.goal is not None
+                        ):
+                            run_domain = event.goal.domain
+                            run_sub_goal = event.goal.sub_goal
+                        elif isinstance(event, CurriculumReadyEvent):
+                            unit_count = len(event.curriculum.units)
+                        elif isinstance(event, AssessmentResultEvent):
+                            if event.result.verdict is Verdict.PASS:
+                                units_passed += 1
                         yield {"data": event.model_dump_json()}
                         yield {"data": _cost_event(acc).model_dump_json()}
                 except Exception as exc:  # noqa: BLE001
                     _logger.exception("session_error", extra={"request_id": rid})
-                    err = ErrorEvent(message=f"{type(exc).__name__}: {exc}")
+                    error_message = f"{type(exc).__name__}: {exc}"
+                    err = ErrorEvent(message=error_message)
                     yield {"data": err.model_dump_json()}
                     yield {"data": _cost_event(acc).model_dump_json()}
-                    return
                 _logger.info(
                     "session_cost",
                     extra={
@@ -411,8 +520,31 @@ async def run_session(request: Request, body: RunSessionRequest) -> EventSourceR
                         "call_count": len(acc.entries),
                     },
                 )
+                # Always close out the session_runs row — success or failure.
+                async with session_factory() as db:
+                    await finish_session_run(
+                        session=db,
+                        run_id=run_id,
+                        unit_count=unit_count or None,
+                        units_passed=units_passed,
+                        total_cost_usd=round(acc.total_usd, 6),
+                        total_latency_s=round(acc.total_latency_s, 3),
+                        cost_by_agent={
+                            k: round(v, 6) for k, v in acc.by_agent().items()
+                        },
+                        latency_by_agent=acc.latency_by_agent_ms(),
+                        error=error_message,
+                    )
+                    # Domain/sub_goal may have been back-filled — refresh row.
+                    if run_domain or run_sub_goal:
+                        row = await db.get(SessionRunRow, run_id)
+                        if row is not None:
+                            row.domain = run_domain
+                            row.sub_goal = run_sub_goal
+                            await db.commit()
         finally:
             _pending_sessions.pop(session_id, None)
+            await unregister_live_session(session_id)
 
     return EventSourceResponse(event_generator(), ping=2)
 
