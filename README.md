@@ -1,3 +1,5 @@
+> **⚠️ Superseded by → [ai-agent-to-learn-faster-and-better](https://github.com/abhijeetgupta23/ai-agent-to-learn-faster-and-better)** — all development continues there.
+
 # adaptive-learning-agent
 
 > An agent that generates a Civ-3-style learning moment for any concept, on demand. Tell it what you want to learn, get a playable, grounded micro-game in ~30 seconds.
